@@ -1,0 +1,62 @@
+# Gradle files
+.gradle/
+build/
+# 忽略所有子模块的 build 目录
+*/build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# 忽略所有输出、临时、日志、缓存、IDE 配置、release/debug、生成文件等
+*.log
+*.tmp
+*.temp
+*.swp
+.DS_Store
+Thumbs.db
+*.apk
+*.ap_*
+*.apks
+*.aab
+outputs/
+captures/
+generated/
+proguard/
+proguard-rules.pro
+intermediates/
+*.lock
+*.bak
+release/
+debug/
+app/src/main/res_copy.rar
+.cxx/
+*.ec
+*.hprof
+.venv/
+venv/
+node_modules/
+.vscode/
+
+# Android Studio generated files and folders
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+output.json
+
+# IntelliJ
+*.iml
+.idea/
+misc.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
+
+# Keystore files
+*.jks
+*.keystore
+
+# Google Services (e.g. APIs or Firebase)
+google-services.json
+
+# Android Profiling
+*.hprof

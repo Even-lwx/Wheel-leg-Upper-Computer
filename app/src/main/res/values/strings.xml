@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">智能陪伴助手</string>
+    <string name="speechButtonText">识别语音</string>
+</resources>
