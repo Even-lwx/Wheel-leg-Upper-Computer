@@ -139,81 +139,82 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+
     private void replaceFragment(Fragment fragment) {
+        // 如果切换到蓝牙Fragment，关闭语音相关进程
+        if (fragment instanceof BluetoothRemoteFragment) {
+            try {
+                // 停止语音播放线程
+                if (speakingRunnable != null) {
+                    speakingRunnable.stop(null);
+                }
+                releaseMicrophoneStream();
+                if (synthesizer != null) {
+                    synthesizer.close();
+                }
+                if (singleThreadExecutor != null && !singleThreadExecutor.isShutdown()) {
+                    singleThreadExecutor.shutdownNow();
+                }
+            } catch (Exception e) {
+                // 忽略异常，防止崩溃
+            }
+        }
+
         FragmentManager fragmentManager = getSupportFragmentManager();
         FragmentTransaction transaction = fragmentManager.beginTransaction();
         transaction.replace(R.id.fragment_container, fragment);
         transaction.commit();
 
+        // 只有切换到语音助手Fragment时才初始化语音SDK和自动播报
+        if (fragment instanceof PlaceholderFragment) {
+            // Initialize SpeechSDK and request required permissions.
+            try {
+                int permissionRequestId = 5;
+                ActivityCompat.requestPermissions(MainActivity.this, new String[]{RECORD_AUDIO, INTERNET, READ_EXTERNAL_STORAGE}, permissionRequestId);
+            } catch(Exception ex) {
+                Log.e("SpeechSDK", "could not init sdk, " + ex.toString());
+            }
 
-        // Initialize SpeechSDK and request required permissions.
-        try {
-            // a unique number within the application to allow
-            // correlating permission request responses with the request.
-            int permissionRequestId = 5;
-
-            // Request permissions needed for speech recognition
-            ActivityCompat.requestPermissions(MainActivity.this, new String[]{RECORD_AUDIO, INTERNET, READ_EXTERNAL_STORAGE}, permissionRequestId);
-        }
-        catch(Exception ex) {
-            Log.e("SpeechSDK", "could not init sdk, " + ex.toString());
-            // recognizedTextView.setText("Could not initialize: " + ex.toString());
-        }
-
-        // create config
-
-        try {
-            //speechConfig = SpeechConfig.fromSubscription(SpeechSubscriptionKey, SpeechRegion);
-            kwsModel = KeywordRecognitionModel.fromFile(copyAssetToCacheAndGetFilePath(KwsModelFile));
-            singleThreadExecutor = Executors.newSingleThreadExecutor();
-
-
-            audioTrack = new AudioTrack(
-                    new AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                            .build(),
-                    new AudioFormat.Builder()
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setSampleRate(24000)
-                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                            .build(),
-                    AudioTrack.getMinBufferSize(
-                            24000,
-                            AudioFormat.CHANNEL_OUT_MONO,
-                            AudioFormat.ENCODING_PCM_16BIT) * 2,
-                    AudioTrack.MODE_STREAM,
-                    AudioManager.AUDIO_SESSION_ID_GENERATE);
-            speechConfig.setSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Raw24Khz16BitMonoPcm);
-            speechConfig.setSpeechRecognitionLanguage("zh-CN");
-            speechConfig.setSpeechSynthesisLanguage("zh-CN");
-            // Set voice name.
-            speechConfig.setSpeechSynthesisVoiceName("zh-CN-XiaoxiaoMultilingualNeural");//en-US-AvaMultilingualNeural"
-            synthesizer = new SpeechSynthesizer(speechConfig, null);
-            connection = Connection.fromSpeechSynthesizer(synthesizer);
-            connection.openConnection(true);
-            synthesizer.SynthesisCompleted.addEventListener((o, e) -> {
-                Log.i(logTag, "Synthesis finished.\n");
-                Log.i( logTag, e.getResult().getProperties().getProperty(PropertyId.SpeechServiceResponse_SynthesisFirstByteLatencyMs) + " ms.\n");
-                Log.i( logTag,  e.getResult().getProperties().getProperty(PropertyId.SpeechServiceResponse_SynthesisFinishLatencyMs) + " ms.\n");
-                e.close();
-
-            });
-
-            String hello = "您好，很高兴为您服务，您可以唤醒我说：你好！";
-            // setRecognizedText(hello);
-            speak(hello,()->{
-                //speechConfig.setSpeechRecognitionLanguage("zh-CN");
-                RegnizeKeyword( speechConfig, kwsModel);
-            });
-
-            // 找到按钮
-
-
-        } catch (Exception ex) {
-            System.out.println(ex.getMessage());
-            // displayException(ex);
-            return;
+            try {
+                kwsModel = KeywordRecognitionModel.fromFile(copyAssetToCacheAndGetFilePath(KwsModelFile));
+                singleThreadExecutor = Executors.newSingleThreadExecutor();
+                audioTrack = new AudioTrack(
+                        new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_MEDIA)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build(),
+                        new AudioFormat.Builder()
+                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                .setSampleRate(24000)
+                                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                .build(),
+                        AudioTrack.getMinBufferSize(
+                                24000,
+                                AudioFormat.CHANNEL_OUT_MONO,
+                                AudioFormat.ENCODING_PCM_16BIT) * 2,
+                        AudioTrack.MODE_STREAM,
+                        AudioManager.AUDIO_SESSION_ID_GENERATE);
+                speechConfig.setSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Raw24Khz16BitMonoPcm);
+                speechConfig.setSpeechRecognitionLanguage("zh-CN");
+                speechConfig.setSpeechSynthesisLanguage("zh-CN");
+                speechConfig.setSpeechSynthesisVoiceName("zh-CN-XiaoxiaoMultilingualNeural");
+                synthesizer = new SpeechSynthesizer(speechConfig, null);
+                connection = Connection.fromSpeechSynthesizer(synthesizer);
+                connection.openConnection(true);
+                synthesizer.SynthesisCompleted.addEventListener((o, e) -> {
+                    Log.i(logTag, "Synthesis finished.\n");
+                    Log.i( logTag, e.getResult().getProperties().getProperty(PropertyId.SpeechServiceResponse_SynthesisFirstByteLatencyMs) + " ms.\n");
+                    Log.i( logTag,  e.getResult().getProperties().getProperty(PropertyId.SpeechServiceResponse_SynthesisFinishLatencyMs) + " ms.\n");
+                    e.close();
+                });
+                String hello = "您好，很高兴为您服务，您可以唤醒我说：你好！";
+                speak(hello,()->{
+                    RegnizeKeyword( speechConfig, kwsModel);
+                });
+            } catch (Exception ex) {
+                System.out.println(ex.getMessage());
+                return;
+            }
         }
 
     }
