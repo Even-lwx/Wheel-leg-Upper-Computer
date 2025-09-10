@@ -7,9 +7,14 @@ package com.microsoft.cognitiveservices.speech.samples.sdkdemo;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import androidx.core.content.FileProvider;
 
+import androidx.core.content.FileProvider;
 import android.content.Intent;
+import android.provider.MediaStore;
+
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -80,8 +85,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String KwsModelFile = "nihao.table";
     private KeywordRecognitionModel kwsModel;
 
-    private TextView recognizedTextView;
-    private TextView actionTextView;
+        // 已移除 recognizedTextView 和 actionTextView
     private final Object lock = new Object();
     private static final int REQUEST_IMAGE_CAPTURE = 1;
     private String currentPhotoPath;
@@ -111,9 +115,35 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        recognizedTextView = findViewById(R.id.recognizedText);
-        recognizedTextView.setMovementMethod(new ScrollingMovementMethod());
-        actionTextView = findViewById(R.id.actionText);
+    // recognizedTextView 和 actionTextView 已移除，对应UI逻辑请迁移到Fragment
+
+    // resetButton已移除，无需再查找和设置监听
+
+        // 底部导航栏点击事件
+        com.google.android.material.bottomnavigation.BottomNavigationView bottomNavigationView = findViewById(R.id.bottom_navigation);
+        // 默认显示语音助手Fragment（可根据实际情况调整）
+        replaceFragment(new PlaceholderFragment());
+        bottomNavigationView.setOnItemSelectedListener(item -> {
+            Fragment fragment = null;
+            if (item.getItemId() == R.id.navigation_bluetooth) {
+                fragment = new BluetoothRemoteFragment();
+            } else if (item.getItemId() == R.id.navigation_voice_assistant) {
+                fragment = new PlaceholderFragment(); // 这里用占位Fragment，后续可替换为语音助手Fragment
+            }
+            if (fragment != null) {
+                replaceFragment(fragment);
+                return true;
+            }
+            return false;
+        });
+
+    }
+
+    private void replaceFragment(Fragment fragment) {
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        FragmentTransaction transaction = fragmentManager.beginTransaction();
+        transaction.replace(R.id.fragment_container, fragment);
+        transaction.commit();
 
 
         // Initialize SpeechSDK and request required permissions.
@@ -127,7 +157,7 @@ public class MainActivity extends AppCompatActivity {
         }
         catch(Exception ex) {
             Log.e("SpeechSDK", "could not init sdk, " + ex.toString());
-            recognizedTextView.setText("Could not initialize: " + ex.toString());
+            // recognizedTextView.setText("Could not initialize: " + ex.toString());
         }
 
         // create config
@@ -171,49 +201,24 @@ public class MainActivity extends AppCompatActivity {
             });
 
             String hello = "您好，很高兴为您服务，您可以唤醒我说：你好！";
-            setRecognizedText(hello);
+            // setRecognizedText(hello);
             speak(hello,()->{
                 //speechConfig.setSpeechRecognitionLanguage("zh-CN");
                 RegnizeKeyword( speechConfig, kwsModel);
             });
 
             // 找到按钮
-            Button myButton = findViewById(R.id.resetButton);
-            myButton.setOnClickListener(v -> {
-                // 在这里编写按钮被点击时要执行的代码
-                if(task!=null) {
-                    speakingRunnable.stop(()->{
-                        setActionText("语音识别任务已成功取消!");
-                        String reset = "已重置，您可以再次唤醒我说：你好！";
-                        setRecognizedText(reset);
-                        speak(reset,()->{
-                            stopped=false;
-                            RegnizeKeyword( speechConfig, kwsModel);
-                        });
-                    });
-                    boolean cancelled = task.cancel(true);
-                    if (cancelled)
-                    {
-                        setActionText("语音识别任务已成功取消!");
-                        String reset = "已重置，您可以再次唤醒我说：你好！";
-                        setRecognizedText(reset);
-                        speak(reset,()->{
-                            stopped=false;
-                            RegnizeKeyword( speechConfig, kwsModel);
-                        });
-                    }
-                }
-            });
+
 
         } catch (Exception ex) {
             System.out.println(ex.getMessage());
-            displayException(ex);
+            // displayException(ex);
             return;
         }
 
     }
     private void RegnizeKeyword(SpeechConfig speechConfig, KeywordRecognitionModel kwsModel){
-        setActionText("等待唤醒...");
+        // setActionText("等待唤醒...");
 
         boolean continuousListeningStarted = false;
         SpeechRecognizer reco = null;
@@ -243,9 +248,9 @@ public class MainActivity extends AppCompatActivity {
                     s = "Keyword: " + word;
                     Log.i(logTag, "Keyword recognized result received: " + s);
 
-                    setActionText("已唤醒!");
+                // setActionText("已唤醒!");
                     String welcome="我在听请讲。";
-                    setRecognizedText(welcome);
+                // setRecognizedText(welcome);
                     speak(welcome,()->{
                         Regnize(speechConfig);
                     });
@@ -268,7 +273,7 @@ public class MainActivity extends AppCompatActivity {
             */
         } catch (Exception ex) {
             System.out.println(ex.getMessage());
-            displayException(ex);
+            // displayException(ex);
         }
     }
     private void Regnize(SpeechConfig speechConfig){
@@ -283,23 +288,23 @@ public class MainActivity extends AppCompatActivity {
             // or mix audio from some other source to microphone audio.
             final AudioConfig audioInput = AudioConfig.fromStreamInput(createMicrophoneStream());
             final SpeechRecognizer reco = new SpeechRecognizer(speechConfig, audioInput);
-            setActionText("倾听中...");
+            // setActionText("倾听中...");
              task = reco.recognizeOnceAsync();
             setOnTaskCompletedListener(task, result -> {
                 String s = "";
                 if (result.getReason() == ResultReason.RecognizedSpeech) {
                     s = result.getText();
-                    setRecognizedText(s);
-                    setActionText("已识别.");
+                // setRecognizedText(s);
+                    // setActionText("已识别.");
                     //String errorDetails = (result.getReason() == ResultReason.Canceled) ? CancellationDetails.fromResult(result).getErrorDetails() : "";
                     //s = "Recognition failed with " + result.getReason() + ". Did you enter your subscription?" + System.lineSeparator() + errorDetails;
                 }else if (result.getReason()==ResultReason.Canceled){
                     reco.close();
                     no_reg_count=0;
-                    setActionText("重置...");
+                // setActionText("重置...");
                     Log.i(logTag, "Reset");
                     String quit="Let start from begin. Please wait a moment!";
-                    setRecognizedText(quit);
+                // setRecognizedText(quit);
                     speak(quit,()->{
                         RegnizeKeyword( speechConfig, kwsModel);
                     });
@@ -311,16 +316,16 @@ public class MainActivity extends AppCompatActivity {
                 if(s==""){
                     no_reg_count+=1;
                     Log.i(logTag, "no_reg_count: " + no_reg_count+"  s:"+s);
-                    setActionText("未能识别.");
+                // setActionText("未能识别.");
                     if (no_reg_count>=3){
                         String quit="我先退下了，您可以再次唤醒我说：你好！";
-                        setRecognizedText(quit);
+                // setRecognizedText(quit);
                         speak(quit,()->{
                             RegnizeKeyword( speechConfig, kwsModel);
                         });
                     }else{
                         String nohear="我没有听清，您还在说话吗？";
-                        setRecognizedText(nohear);
+                // setRecognizedText(nohear);
                         speak(nohear,()->{
                             Regnize(speechConfig);
                         });
@@ -328,7 +333,7 @@ public class MainActivity extends AppCompatActivity {
                 }else{
                     no_reg_count=0;
                     String res = ChatAPI.generateText(s);
-                    setRecognizedText(res);
+                // setRecognizedText(res);
                     speak(res,()->{
                         Regnize(speechConfig);
                     });
@@ -337,11 +342,11 @@ public class MainActivity extends AppCompatActivity {
             });
         } catch (Exception ex) {
             System.out.println(ex.getMessage());
-            displayException(ex);
+            // displayException(ex);
         }
     }
 private void speak(String s,ICallback callback){
-    setActionText("说话中...");
+        // setActionText("说话中...");
     speakingRunnable = new SpeakingRunnable();
     speakingRunnable.setContent(s);
     if (callback!=null){
@@ -349,17 +354,9 @@ private void speak(String s,ICallback callback){
     }
     singleThreadExecutor.execute(speakingRunnable);
 }
-    private void displayException(Exception ex) {
-        recognizedTextView.setText(ex.getMessage() + System.lineSeparator() + TextUtils.join(System.lineSeparator(), ex.getStackTrace()));
-    }
 
 
-    private void setRecognizedText(final String s) {
-        runOnUiThread(() -> recognizedTextView.setText(s));
-    }
-    private void setActionText(final String s) {
-        runOnUiThread(() -> actionTextView.setText(s));
-    }
+        // 已移除 setRecognizedText、setActionText、displayException 方法
 
     private <T> void setOnTaskCompletedListener(Future<T> task, OnTaskCompletedListener<T> listener) {
         s_executorService.submit(() -> {

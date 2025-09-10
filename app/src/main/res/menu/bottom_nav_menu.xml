@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- TODO: 添加菜单项 -->
+    <item
+        android:id="@+id/navigation_voice_assistant"
+        android:icon="@android:drawable/ic_btn_speak_now"
+        android:title="语音助手" />
+    <item
+        android:id="@+id/navigation_bluetooth"
+        android:icon="@android:drawable/ic_menu_share"
+        android:title="蓝牙连接" />
 </menu>
