@@ -3,11 +3,65 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center">
+    android:padding="16dp">
+
     <TextView
         android:id="@+id/bluetooth_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="蓝牙连接页面"
-        android:textSize="24sp" />
+        android:text="蓝牙连接"
+        android:textSize="24sp"
+        android:layout_gravity="center_horizontal"/>
+
+    <Switch
+        android:id="@+id/switch_bluetooth"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="蓝牙开关"
+        android:layout_marginTop="16dp"/>
+
+    <Button
+        android:id="@+id/btn_search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="搜索设备"
+        android:layout_marginTop="16dp"/>
+
+    <TextView
+        android:id="@+id/tv_paired"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="已配对设备："
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"/>
+
+    <ListView
+        android:id="@+id/list_paired"
+        android:layout_width="match_parent"
+        android:layout_height="100dp"
+        android:dividerHeight="1dp"/>
+
+    <TextView
+        android:id="@+id/tv_found"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="可用设备："
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"/>
+
+    <ListView
+        android:id="@+id/list_found"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:dividerHeight="1dp"/>
+
+    <TextView
+        android:id="@+id/tv_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="状态：未连接"
+        android:layout_marginTop="8dp"
+        android:textColor="#FF5722"/>
+
 </LinearLayout>
