@@ -909,24 +909,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
+     * 控制命令执行结果状态码
+     */
+    private static final int CONTROL_CMD_NOT_DETECTED = 0;  // 未检测到控制命令
+    private static final int CONTROL_CMD_SUCCESS = 1;       // 控制命令执行成功
+    private static final int CONTROL_CMD_NO_BLUETOOTH = 2;  // 未连接蓝牙
+
+    /**
      * 检测语音文本中的控制关键词并执行蓝牙命令
      * @param text 识别到的语音文本
+     * @return 状态码: 0=未检测到控制命令, 1=执行成功, 2=未连接蓝牙
      */
-    private void detectAndExecuteVoiceCommand(String text) {
+    private int detectAndExecuteVoiceCommand(String text) {
         if (text == null || text.isEmpty()) {
-            return;
-        }
-
-        // 检查蓝牙服务是否可用
-        if (bluetoothService == null || !isBluetoothServiceBound) {
-            Log.w(logTag, "蓝牙服务未绑定，无法执行语音控制命令");
-            return;
-        }
-
-        // 检查蓝牙是否已连接
-        if (!bluetoothService.isConnected()) {
-            Log.w(logTag, "蓝牙未连接，无法执行语音控制命令");
-            return;
+            return CONTROL_CMD_NOT_DETECTED;
         }
 
         String command = null;
@@ -950,17 +946,29 @@ public class MainActivity extends AppCompatActivity {
             action = "右转";
         }
 
-        // 如果检测到命令，发送到下位机
-        if (command != null) {
-            try {
-                bluetoothService.sendData(command);
-                Log.i(logTag, "语音控制: 检测到【" + action + "】命令，已发送指令: " + command);
+        // 如果没有检测到控制命令，返回状态码0
+        if (command == null) {
+            return CONTROL_CMD_NOT_DETECTED;
+        }
 
-                // 显示反馈提示
-                showMotionCommandFeedback(action);
-            } catch (Exception e) {
-                Log.e(logTag, "发送蓝牙控制命令失败: " + e.getMessage());
-            }
+        // 检测到控制命令，检查蓝牙连接状态
+        if (bluetoothService == null || !isBluetoothServiceBound || !bluetoothService.isConnected()) {
+            Log.w(logTag, "检测到【" + action + "】命令，但蓝牙未连接");
+            return CONTROL_CMD_NO_BLUETOOTH;
+        }
+
+        // 蓝牙已连接，执行命令
+        try {
+            bluetoothService.sendData(command);
+            Log.i(logTag, "语音控制: 检测到【" + action + "】命令，已发送指令: " + command);
+
+            // 显示反馈提示
+            showMotionCommandFeedback(action);
+            
+            return CONTROL_CMD_SUCCESS;
+        } catch (Exception e) {
+            Log.e(logTag, "发送蓝牙控制命令失败: " + e.getMessage());
+            return CONTROL_CMD_NO_BLUETOOTH;
         }
     }
 
@@ -1032,15 +1040,34 @@ public class MainActivity extends AppCompatActivity {
                 }else{
                     no_reg_count=0;
 
-                    // 检测并执行语音控制命令
-                    detectAndExecuteVoiceCommand(s);
-
-                    String res = ChatAPI.generateText(s);
-                    speak(res,()->{
-                        if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
-                            Regnize(speechConfig);
-                        }
-                    });
+                    // 检测控制命令并获取执行状态
+                    int commandStatus = detectAndExecuteVoiceCommand(s);
+                    
+                    if (commandStatus == CONTROL_CMD_SUCCESS) {
+                        // 控制命令执行成功，给简短反馈
+                        String controlFeedback = "收到";
+                        speak(controlFeedback, () -> {
+                            if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                                Regnize(speechConfig);
+                            }
+                        });
+                    } else if (commandStatus == CONTROL_CMD_NO_BLUETOOTH) {
+                        // 检测到控制命令但蓝牙未连接
+                        String bluetoothWarning = "未连接蓝牙设备，无法执行操作";
+                        speak(bluetoothWarning, () -> {
+                            if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                                Regnize(speechConfig);
+                            }
+                        });
+                    } else {
+                        // 不是控制命令，调用DeepSeek
+                        String res = ChatAPI.generateText(s);
+                        speak(res, () -> {
+                            if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                                Regnize(speechConfig);
+                            }
+                        });
+                    }
                 }
             });
         } catch (Exception ex) {
