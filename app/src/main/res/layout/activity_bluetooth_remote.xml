@@ -3,11 +3,20 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center">
+    android:gravity="center"
+    android:background="@color/colorBackgroundLight"
+    android:padding="24dp">
+    
     <TextView
         android:id="@+id/bluetooth_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="蓝牙连接页面"
-        android:textSize="24sp" />
+        android:textSize="28sp"
+        android:textColor="@color/colorPrimary"
+        android:textStyle="bold"
+        android:padding="16dp"
+        android:background="@drawable/bg_card_rounded"
+        android:elevation="4dp" />
+        
 </LinearLayout>

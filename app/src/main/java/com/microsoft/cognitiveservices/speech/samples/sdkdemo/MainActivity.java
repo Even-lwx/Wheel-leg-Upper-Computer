@@ -105,6 +105,13 @@ public class MainActivity extends AppCompatActivity {
     private static final String KwsModelFile = "nihao.table";
     private KeywordRecognitionModel kwsModel;
 
+    // 蓝牙遥控命令定义（与 BluetoothRemoteFragment 保持一致）
+    private static final String CMD_FORWARD = "1";    // 前进
+    private static final String CMD_BACKWARD = "2";   // 后退
+    private static final String CMD_LEFT = "4";       // 左转
+    private static final String CMD_RIGHT = "5";      // 右转
+    private static final String CMD_STOP = "3";       // 停止
+
     private final Object lock = new Object();
     private Future<SpeechRecognitionResult> task;
 
@@ -665,6 +672,59 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * 检测语音文本中的控制关键词并执行蓝牙命令
+     * @param text 识别到的语音文本
+     */
+    private void detectAndExecuteVoiceCommand(String text) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+
+        // 检查蓝牙服务是否可用
+        if (bluetoothService == null || !isBluetoothServiceBound) {
+            Log.w(logTag, "蓝牙服务未绑定，无法执行语音控制命令");
+            return;
+        }
+
+        // 检查蓝牙是否已连接
+        if (!bluetoothService.isConnected()) {
+            Log.w(logTag, "蓝牙未连接，无法执行语音控制命令");
+            return;
+        }
+
+        String command = null;
+        String action = null;
+
+        // 检测控制关键词
+        if (text.contains("前进")) {
+            command = CMD_FORWARD;
+            action = "前进";
+        } else if (text.contains("后退")) {
+            command = CMD_BACKWARD;
+            action = "后退";
+        } else if (text.contains("停止") || text.contains("停下")) {
+            command = CMD_STOP;
+            action = "停止";
+        } else if (text.contains("左转") || text.contains("向左")) {
+            command = CMD_LEFT;
+            action = "左转";
+        } else if (text.contains("右转") || text.contains("向右")) {
+            command = CMD_RIGHT;
+            action = "右转";
+        }
+
+        // 如果检测到命令，发送到下位机
+        if (command != null) {
+            try {
+                bluetoothService.sendData(command);
+                Log.i(logTag, "语音控制: 检测到【" + action + "】命令，已发送指令: " + command);
+            } catch (Exception e) {
+                Log.e(logTag, "发送蓝牙控制命令失败: " + e.getMessage());
+            }
+        }
+    }
+
     private void Regnize(SpeechConfig speechConfig){
         final String logTag = "reco 1";
 
@@ -704,6 +764,7 @@ public class MainActivity extends AppCompatActivity {
 
                 reco.close();
                 Log.i(logTag, "Recognizer returned: " + s);
+                Log.i(logTag, "语音识别文本: 【" + s + "】，准备检测控制命令");
 
                 // 检查状态
                 if (isBluetoothFragmentActive || isVoiceFunctionsPaused) {
@@ -731,6 +792,10 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }else{
                     no_reg_count=0;
+
+                    // 检测并执行语音控制命令
+                    detectAndExecuteVoiceCommand(s);
+
                     String res = ChatAPI.generateText(s);
                     speak(res,()->{
                         if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {

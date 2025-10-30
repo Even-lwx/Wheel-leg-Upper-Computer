@@ -6,7 +6,23 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
-        <item name="android:windowBackground">@color/colorPrimaryDark</item> <!-- 设置全局背景色为黑色 -->
-        <item name="android:textColor">#FFFFFF</item> <!-- 设置全局字体颜色为白色 -->
+        <item name="android:windowBackground">@color/colorBackgroundLight</item>
+        <item name="android:textColor">@color/colorTextDark</item>
+        <item name="android:textColorSecondary">@color/colorTextSecondary</item>
     </style>
+
+    <!-- 按钮样式 -->
+    <style name="RoundedButton" parent="Widget.AppCompat.Button">
+        <item name="android:textColor">@color/colorTextLight</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:elevation">4dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <!-- 卡片样式 -->
+    <style name="CardStyle">
+        <item name="android:background">@drawable/bg_card_rounded</item>
+        <item name="android:elevation">4dp</item>
+    </style>
+
 </resources>

@@ -1,25 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#BD5742</color>
-    <color name="colorPrimaryDark">#C7731E</color>
+    <!-- 主色调 - 提高饱和度和对比度 -->
+    <color name="colorPrimary">#D84315</color>
+    <color name="colorPrimaryDark">#BF360C</color>
     <color name="colorAccent">#FF4081</color>
-    <color name="colorPrimaryLight">#E8C8C2</color>
-    <color name="colorBackgroundLight">#F5E6E2</color>
-    <color name="colorTextDark">#5A2E1E</color>
+    <color name="colorPrimaryLight">#FFCCBC</color>
+    <color name="colorBackgroundLight">#FAFAFA</color>
+    
+    <!-- 文字颜色 - 高对比度 -->
+    <color name="colorTextDark">#212121</color>
     <color name="colorTextLight">#FFFFFF</color>
-    <color name="design_default_color_error">#D32F2F</color>
-    <color name="colorListItemBackground">#F8EFED</color>
-    <color name="colorEditTextBackground">#FDF6F5</color>
-    <color name="primary_color">#2196F3</color>
-    <color name="secondary_color">#FF9800</color>
+    <color name="colorTextSecondary">#757575</color>
+    
+    <!-- 功能色 -->
+    <color name="design_default_color_error">#E53935</color>
+    <color name="colorSuccess">#43A047</color>
+    <color name="colorWarning">#FB8C00</color>
+    
+    <!-- 卡片和列表背景 - 更清晰的层次 -->
+    <color name="colorListItemBackground">#FFFFFF</color>
+    <color name="colorEditTextBackground">#FFFFFF</color>
+    <color name="colorCardBackground">#FFFFFF</color>
+    
+    <!-- 按钮颜色 - 增强对比 -->
+    <color name="primary_color">#1976D2</color>
+    <color name="secondary_color">#F57C00</color>
     <color name="accent_color">#E91E63</color>
     <color name="background_color">#F5F5F5</color>
+    
+    <!-- 基础色 -->
     <color name="white">#FFFFFF</color>
     <color name="text_primary">#212121</color>
     <color name="text_secondary">#757575</color>
-    <color name="cat_pink">#FFB6C1</color>
-    <color name="cat_purple">#D8BFD8</color>
-    <color name="cat_blue">#ADD8E6</color>
-    <color name="cat_yellow">#FFFACD</color>
+    
+    <!-- 主题色 - 可爱风格保留但增强可读性 -->
+    <color name="cat_pink">#F06292</color>
+    <color name="cat_purple">#BA68C8</color>
+    <color name="cat_blue">#42A5F5</color>
+    <color name="cat_yellow">#FFEB3B</color>
+    
+    <!-- 其他 -->
     <color name="transparent">#00000000</color>
+    <color name="divider">#E0E0E0</color>
+    <color name="shadow">#40000000</color>
 </resources>
