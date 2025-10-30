@@ -1,7 +1,7 @@
 <resources>
 
     <!-- Base application theme. -->
-    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
@@ -9,6 +9,9 @@
         <item name="android:windowBackground">@color/colorBackgroundLight</item>
         <item name="android:textColor">@color/colorTextDark</item>
         <item name="android:textColorSecondary">@color/colorTextSecondary</item>
+        <!-- 隐藏标题栏，避免遮挡内容 -->
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
     </style>
 
     <!-- 按钮样式 -->

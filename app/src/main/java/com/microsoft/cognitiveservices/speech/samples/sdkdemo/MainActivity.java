@@ -20,6 +20,8 @@ import android.os.Handler;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageView;
+import android.widget.Toast;
+import android.os.Vibrator;
 
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
@@ -70,6 +72,9 @@ public class MainActivity extends AppCompatActivity {
     // 蓝牙服务相关
     private BluetoothService bluetoothService;
     private boolean isBluetoothServiceBound = false;
+
+    // 震动器
+    private Vibrator vibrator;
 
     // 添加蓝牙状态跟踪变量
     private boolean isBluetoothFragmentActive = false;
@@ -204,7 +209,10 @@ public class MainActivity extends AppCompatActivity {
         // 获取布局组件引用
         fragmentContainer = findViewById(R.id.fragment_container);
         bottomNavigationView = findViewById(R.id.bottom_navigation);
-        
+
+        // 初始化震动器
+        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+
         // 检查当前屏幕方向
         checkOrientation();
 
@@ -851,6 +859,56 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
+     * 显示运动控制命令的反馈提示
+     * @param action 动作名称（前进、后退、左转、右转、停止）
+     */
+    private void showMotionCommandFeedback(final String action) {
+        runOnUiThread(() -> {
+            // 1. Toast 视觉提示 - 使用 emoji 图标
+            String icon;
+            switch (action) {
+                case "前进":
+                    icon = "⬆️";
+                    break;
+                case "后退":
+                    icon = "⬇️";
+                    break;
+                case "左转":
+                    icon = "⬅️";
+                    break;
+                case "右转":
+                    icon = "➡️";
+                    break;
+                case "停止":
+                    icon = "⏹️";
+                    break;
+                default:
+                    icon = "✓";
+            }
+            String message = icon + " " + action;
+            Toast toast = Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT);
+            toast.show();
+
+            // 2. 震动触觉反馈
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    // Android 8.0+ 使用 VibrationEffect
+                    android.os.VibrationEffect effect = android.os.VibrationEffect.createOneShot(
+                            100, // 震动 100 毫秒
+                            android.os.VibrationEffect.DEFAULT_AMPLITUDE
+                    );
+                    vibrator.vibrate(effect);
+                } else {
+                    // 旧版本 Android
+                    vibrator.vibrate(100);
+                }
+            }
+
+            Log.i(logTag, "运动命令反馈: " + action);
+        });
+    }
+
+    /**
      * 检测语音文本中的控制关键词并执行蓝牙命令
      * @param text 识别到的语音文本
      */
@@ -897,6 +955,9 @@ public class MainActivity extends AppCompatActivity {
             try {
                 bluetoothService.sendData(command);
                 Log.i(logTag, "语音控制: 检测到【" + action + "】命令，已发送指令: " + command);
+
+                // 显示反馈提示
+                showMotionCommandFeedback(action);
             } catch (Exception e) {
                 Log.e(logTag, "发送蓝牙控制命令失败: " + e.getMessage());
             }
