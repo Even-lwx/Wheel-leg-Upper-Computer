@@ -1,29 +1,25 @@
-//
-// Copyright (c) Microsoft. All rights reserved.
-// Licensed under the MIT license. See LICENSE.md file in the project root for full license information.
-//
 package com.microsoft.cognitiveservices.speech.samples.sdkdemo;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
-import androidx.core.content.FileProvider;
+import android.Manifest;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
-import android.provider.MediaStore;
+import android.content.ServiceConnection;
+import android.media.AudioManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.util.Log;
+import android.os.Handler;
 
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
-import android.net.Uri;
-import android.os.Bundle;
-import android.os.Environment;
-import android.provider.MediaStore;
-import android.text.TextUtils;
-import android.text.method.ScrollingMovementMethod;
-import android.util.Log;
-import android.widget.Button;
-import android.widget.TextView;
 
 import com.microsoft.cognitiveservices.speech.PropertyId;
 import com.microsoft.cognitiveservices.speech.audio.AudioConfig;
@@ -39,7 +35,6 @@ import com.microsoft.cognitiveservices.speech.AudioDataStream;
 import com.microsoft.cognitiveservices.speech.SpeechSynthesisOutputFormat;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
-import android.media.AudioManager;
 import android.media.AudioTrack;
 
 import java.io.File;
@@ -50,15 +45,16 @@ import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+
+// 缺少这行导入
+import android.content.pm.PackageManager;
 
 import static android.Manifest.permission.INTERNET;
 import static android.Manifest.permission.READ_EXTERNAL_STORAGE;
 import static android.Manifest.permission.RECORD_AUDIO;
 
 public class MainActivity extends AppCompatActivity {
-    private static final String logTag = "keyword";
+    private static final String logTag = "MainActivity";
     private SpeakingRunnable speakingRunnable;
     private ExecutorService singleThreadExecutor;
     private SpeechSynthesizer synthesizer;
@@ -66,6 +62,30 @@ public class MainActivity extends AppCompatActivity {
     private AudioTrack audioTrack;
     private final Object synchronizedObj;
     private boolean stopped = false;
+
+    // 蓝牙服务相关
+    private BluetoothService bluetoothService;
+    private boolean isBluetoothServiceBound = false;
+
+    // 添加蓝牙状态跟踪变量
+    private boolean isBluetoothFragmentActive = false;
+    private boolean isVoiceInitialized = false;
+    private boolean isVoiceFunctionsPaused = false;
+
+    // 添加音频焦点状态
+    private boolean hasAudioFocus = false;
+
+    // 添加蓝牙连接状态监听器
+    public interface BluetoothConnectionListener {
+        void onBluetoothFragmentResumed();
+        void onBluetoothFragmentPaused();
+    }
+    private BluetoothConnectionListener bluetoothConnectionListener;
+
+    public void setBluetoothConnectionListener(BluetoothConnectionListener listener) {
+        this.bluetoothConnectionListener = listener;
+    }
+
     //
     // Configuration for speech recognition
     //
@@ -85,13 +105,56 @@ public class MainActivity extends AppCompatActivity {
     private static final String KwsModelFile = "nihao.table";
     private KeywordRecognitionModel kwsModel;
 
-        // 已移除 recognizedTextView 和 actionTextView
     private final Object lock = new Object();
-    private static final int REQUEST_IMAGE_CAPTURE = 1;
-    private String currentPhotoPath;
     private Future<SpeechRecognitionResult> task;
 
     private MicrophoneStream microphoneStream;
+
+    // 蓝牙服务连接
+    private ServiceConnection bluetoothServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            Log.d(logTag, "蓝牙服务已连接");
+            BluetoothService.LocalBinder binder = (BluetoothService.LocalBinder) service;
+            bluetoothService = binder.getService();
+            isBluetoothServiceBound = true;
+
+            // 设置蓝牙连接监听器
+            bluetoothService.setConnectionListener(new BluetoothService.BluetoothConnectionListener() {
+                @Override
+                public void onBluetoothConnected(android.bluetooth.BluetoothDevice device) {
+                    Log.i(logTag, "蓝牙连接成功: " + device.getName());
+                    // 可以在这里更新全局状态或通知Fragment
+                }
+
+                @Override
+                public void onBluetoothDisconnected() {
+                    Log.i(logTag, "蓝牙连接断开");
+                    // 可以在这里更新全局状态或通知Fragment
+                }
+
+                @Override
+                public void onBluetoothConnectionFailed(String error) {
+                    Log.e(logTag, "蓝牙连接失败: " + error);
+                }
+
+                @Override
+                public void onDataReceived(String data) {
+                    Log.i(logTag, "收到蓝牙数据: " + data);
+                    // 处理接收到的数据
+                }
+            });
+
+            Log.d(logTag, "蓝牙服务已绑定并监听器已设置");
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            Log.d(logTag, "蓝牙服务已断开连接");
+            isBluetoothServiceBound = false;
+            bluetoothService = null;
+        }
+    };
 
     public MainActivity() {
         synchronizedObj = new Object();
@@ -103,9 +166,14 @@ public class MainActivity extends AppCompatActivity {
         microphoneStream = new MicrophoneStream();
         return microphoneStream;
     }
+
     private void releaseMicrophoneStream() {
         if (microphoneStream != null) {
-            microphoneStream.close();
+            try {
+                microphoneStream.close();
+            } catch (Exception e) {
+                Log.e(logTag, "关闭麦克风流时出错: " + e.getMessage());
+            }
             microphoneStream = null;
         }
     }
@@ -114,113 +182,429 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        Log.d(logTag, "MainActivity onCreate");
 
-    // recognizedTextView 和 actionTextView 已移除，对应UI逻辑请迁移到Fragment
+        // 首先检查并请求必要的权限
+        checkAndRequestPermissions();
 
-    // resetButton已移除，无需再查找和设置监听
+        // 延迟启动并绑定蓝牙服务，确保权限已获取
+        new Handler().postDelayed(() -> {
+            try {
+                Intent serviceIntent = new Intent(this, BluetoothService.class);
+                startService(serviceIntent);
+                bindService(serviceIntent, bluetoothServiceConnection, Context.BIND_AUTO_CREATE);
+                Log.d(logTag, "蓝牙服务已启动并绑定");
+            } catch (Exception e) {
+                Log.e(logTag, "启动蓝牙服务失败: " + e.getMessage());
+            }
+        }, 1000);
 
         // 底部导航栏点击事件
         com.google.android.material.bottomnavigation.BottomNavigationView bottomNavigationView = findViewById(R.id.bottom_navigation);
-        // 默认显示语音助手Fragment（可根据实际情况调整）
-        replaceFragment(new PlaceholderFragment());
+
+        // 默认显示语音助手Fragment
+        try {
+            replaceFragment(new PlaceholderFragment());
+            Log.d(logTag, "默认Fragment已设置");
+        } catch (Exception e) {
+            Log.e(logTag, "设置默认Fragment失败: " + e.getMessage());
+        }
+
         bottomNavigationView.setOnItemSelectedListener(item -> {
             Fragment fragment = null;
-            if (item.getItemId() == R.id.navigation_bluetooth) {
-                fragment = new BluetoothRemoteFragment();
-            } else if (item.getItemId() == R.id.navigation_voice_assistant) {
-                fragment = new PlaceholderFragment(); // 这里用占位Fragment，后续可替换为语音助手Fragment
-            }
-            if (fragment != null) {
-                replaceFragment(fragment);
-                return true;
+            try {
+                if (item.getItemId() == R.id.navigation_bluetooth) {
+                    fragment = new BluetoothRemoteFragment();
+                    isBluetoothFragmentActive = true;
+                    // 切换到蓝牙时暂停语音功能
+                    pauseVoiceFunctions();
+                    if (bluetoothConnectionListener != null) {
+                        bluetoothConnectionListener.onBluetoothFragmentResumed();
+                    }
+                    Log.d(logTag, "切换到蓝牙Fragment");
+                } else if (item.getItemId() == R.id.navigation_voice_assistant) {
+                    fragment = new PlaceholderFragment();
+                    isBluetoothFragmentActive = false;
+                    // 切换到语音时恢复语音功能
+                    resumeVoiceFunctions();
+                    if (bluetoothConnectionListener != null) {
+                        bluetoothConnectionListener.onBluetoothFragmentPaused();
+                    }
+                    Log.d(logTag, "切换到语音Fragment");
+                }
+                if (fragment != null) {
+                    replaceFragment(fragment);
+                    return true;
+                }
+            } catch (Exception e) {
+                Log.e(logTag, "切换Fragment失败: " + e.getMessage());
             }
             return false;
         });
-
     }
 
+    // 检查并请求权限
+    private void checkAndRequestPermissions() {
+        String[] permissions;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions = new String[]{
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    RECORD_AUDIO,
+                    INTERNET,
+                    READ_EXTERNAL_STORAGE
+            };
+        } else {
+            permissions = new String[]{
+                    Manifest.permission.BLUETOOTH,
+                    Manifest.permission.BLUETOOTH_ADMIN,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    RECORD_AUDIO,
+                    INTERNET,
+                    READ_EXTERNAL_STORAGE
+            };
+        }
+
+        ArrayList<String> toRequest = new ArrayList<>();
+        for (String p : permissions) {
+            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
+                toRequest.add(p);
+            }
+        }
+
+        if (!toRequest.isEmpty()) {
+            Log.d(logTag, "请求权限: " + toRequest);
+            ActivityCompat.requestPermissions(this, toRequest.toArray(new String[0]), 100);
+        } else {
+            Log.d(logTag, "所有必要权限已授予");
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        Log.d(logTag, "权限请求结果: requestCode=" + requestCode);
+
+        boolean allGranted = true;
+        for (int result : grantResults) {
+            if (result != PackageManager.PERMISSION_GRANTED) {
+                allGranted = false;
+                break;
+            }
+        }
+
+        if (allGranted) {
+            Log.d(logTag, "所有权限已授予");
+            // 权限授予后初始化语音功能
+            if (!isVoiceInitialized) {
+                initializeVoiceSDK();
+            }
+        } else {
+            Log.w(logTag, "部分权限未授予");
+            // 可以在这里提示用户需要权限
+        }
+    }
 
     private void replaceFragment(Fragment fragment) {
-        // 如果切换到蓝牙Fragment，关闭语音相关进程
-        if (fragment instanceof BluetoothRemoteFragment) {
+        try {
+            FragmentManager fragmentManager = getSupportFragmentManager();
+            FragmentTransaction transaction = fragmentManager.beginTransaction();
+            transaction.replace(R.id.fragment_container, fragment);
+            transaction.commitNow(); // 使用commitNow避免异步问题
+            Log.d(logTag, "Fragment替换成功");
+        } catch (Exception e) {
+            Log.e(logTag, "替换Fragment时出错: " + e.getMessage());
+            // 尝试使用commit
             try {
-                // 停止语音播放线程
-                if (speakingRunnable != null) {
-                    speakingRunnable.stop(null);
-                }
-                releaseMicrophoneStream();
-                if (synthesizer != null) {
-                    synthesizer.close();
-                }
-                if (singleThreadExecutor != null && !singleThreadExecutor.isShutdown()) {
-                    singleThreadExecutor.shutdownNow();
-                }
-            } catch (Exception e) {
-                // 忽略异常，防止崩溃
+                FragmentManager fragmentManager = getSupportFragmentManager();
+                FragmentTransaction transaction = fragmentManager.beginTransaction();
+                transaction.replace(R.id.fragment_container, fragment);
+                transaction.commit();
+            } catch (Exception e2) {
+                Log.e(logTag, "使用commit也失败: " + e2.getMessage());
             }
         }
+    }
 
-        FragmentManager fragmentManager = getSupportFragmentManager();
-        FragmentTransaction transaction = fragmentManager.beginTransaction();
-        transaction.replace(R.id.fragment_container, fragment);
-        transaction.commit();
+    private void pauseVoiceFunctions() {
+        if (isVoiceFunctionsPaused) {
+            return; // 已经暂停过了，避免重复操作
+        }
 
-        // 只有切换到语音助手Fragment时才初始化语音SDK和自动播报
-        if (fragment instanceof PlaceholderFragment) {
-            // Initialize SpeechSDK and request required permissions.
-            try {
-                int permissionRequestId = 5;
-                ActivityCompat.requestPermissions(MainActivity.this, new String[]{RECORD_AUDIO, INTERNET, READ_EXTERNAL_STORAGE}, permissionRequestId);
-            } catch(Exception ex) {
-                Log.e("SpeechSDK", "could not init sdk, " + ex.toString());
+        Log.i(logTag, "暂停语音功能，保护蓝牙连接");
+        isVoiceFunctionsPaused = true;
+
+        try {
+            // 停止语音播放
+            if (speakingRunnable != null) {
+                speakingRunnable.stop(null);
             }
 
-            try {
-                kwsModel = KeywordRecognitionModel.fromFile(copyAssetToCacheAndGetFilePath(KwsModelFile));
-                singleThreadExecutor = Executors.newSingleThreadExecutor();
-                audioTrack = new AudioTrack(
-                        new AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_MEDIA)
-                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                                .build(),
-                        new AudioFormat.Builder()
-                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                                .setSampleRate(24000)
-                                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                                .build(),
-                        AudioTrack.getMinBufferSize(
-                                24000,
-                                AudioFormat.CHANNEL_OUT_MONO,
-                                AudioFormat.ENCODING_PCM_16BIT) * 2,
-                        AudioTrack.MODE_STREAM,
-                        AudioManager.AUDIO_SESSION_ID_GENERATE);
-                speechConfig.setSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Raw24Khz16BitMonoPcm);
-                speechConfig.setSpeechRecognitionLanguage("zh-CN");
-                speechConfig.setSpeechSynthesisLanguage("zh-CN");
-                speechConfig.setSpeechSynthesisVoiceName("zh-CN-XiaoxiaoMultilingualNeural");
-                synthesizer = new SpeechSynthesizer(speechConfig, null);
-                connection = Connection.fromSpeechSynthesizer(synthesizer);
-                connection.openConnection(true);
-                synthesizer.SynthesisCompleted.addEventListener((o, e) -> {
-                    Log.i(logTag, "Synthesis finished.\n");
-                    Log.i( logTag, e.getResult().getProperties().getProperty(PropertyId.SpeechServiceResponse_SynthesisFirstByteLatencyMs) + " ms.\n");
-                    Log.i( logTag,  e.getResult().getProperties().getProperty(PropertyId.SpeechServiceResponse_SynthesisFinishLatencyMs) + " ms.\n");
-                    e.close();
-                });
-                String hello = "您好，很高兴为您服务，您可以唤醒我说：你好！";
-                speak(hello,()->{
-                    RegnizeKeyword( speechConfig, kwsModel);
-                });
-            } catch (Exception ex) {
-                System.out.println(ex.getMessage());
+            // 释放麦克风资源
+            releaseMicrophoneStream();
+
+            // 停止语音识别任务
+            if (task != null && !task.isDone()) {
+                task.cancel(true);
+                Log.i(logTag, "语音识别任务已取消");
+            }
+
+            // 安全暂停音频轨道
+            if (audioTrack != null) {
+                try {
+                    if (audioTrack.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) {
+                        audioTrack.pause();
+                        Log.i(logTag, "音频轨道已暂停");
+                    }
+                    // 不要flush，避免数据丢失
+                } catch (Exception e) {
+                    Log.e(logTag, "暂停音频轨道失败: " + e.getMessage());
+                }
+            }
+
+            // 延迟放弃音频焦点
+            new Handler().postDelayed(() -> {
+                try {
+                    AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                    if (audioManager != null && hasAudioFocus) {
+                        int result = audioManager.abandonAudioFocus(null);
+                        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                            hasAudioFocus = false;
+                            Log.i(logTag, "音频焦点已放弃");
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.e(logTag, "放弃音频焦点失败: " + e.getMessage());
+                }
+            }, 500);
+
+        } catch (Exception e) {
+            Log.e(logTag, "暂停语音功能时出错: " + e.getMessage());
+        }
+    }
+
+    private void resumeVoiceFunctions() {
+        Log.i(logTag, "恢复语音功能，检查蓝牙状态");
+        isVoiceFunctionsPaused = false;
+
+        try {
+            AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (audioManager == null) {
+                Log.w(logTag, "AudioManager 不可用");
                 return;
             }
+
+            // 检查当前是否有蓝牙音频连接
+            if (isBluetoothAudioActive(audioManager)) {
+                Log.i(logTag, "检测到蓝牙音频活跃，延迟语音功能恢复");
+                // 延迟初始化，等待蓝牙音频稳定
+                new Handler().postDelayed(() -> {
+                    if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                        safelyInitializeVoiceFunctions();
+                    }
+                }, 1500);
+            } else {
+                safelyInitializeVoiceFunctions();
+            }
+
+        } catch (Exception e) {
+            Log.e(logTag, "恢复语音功能时出错: " + e.getMessage());
         }
-
     }
-    private void RegnizeKeyword(SpeechConfig speechConfig, KeywordRecognitionModel kwsModel){
-        // setActionText("等待唤醒...");
 
+    // 检查蓝牙音频是否活跃
+    private boolean isBluetoothAudioActive(AudioManager audioManager) {
+        try {
+            return audioManager.isBluetoothA2dpOn() ||
+                    audioManager.isBluetoothScoOn() ||
+                    isBluetoothHeadsetConnected(audioManager);
+        } catch (Exception e) {
+            Log.w(logTag, "检查蓝牙音频状态失败: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // 检查蓝牙耳机是否连接
+    private boolean isBluetoothHeadsetConnected(AudioManager audioManager) {
+        try {
+            return audioManager.isBluetoothScoAvailableOffCall() ||
+                    audioManager.isWiredHeadsetOn();
+        } catch (Exception e) {
+            Log.w(logTag, "检查蓝牙设备连接状态失败: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // 安全的语音功能初始化
+    private void safelyInitializeVoiceFunctions() {
+        if (!isVoiceInitialized) {
+            initializeVoiceSDK();
+        } else {
+            Log.i(logTag, "安全恢复语音功能");
+            try {
+                // 只有在没有蓝牙连接且不在蓝牙Fragment时才请求音频焦点
+                if (!isBluetoothFragmentActive && (bluetoothService == null || !bluetoothService.isConnected())) {
+                    AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                    if (audioManager != null && !hasAudioFocus) {
+                        int result = audioManager.requestAudioFocus(
+                                null,
+                                AudioManager.STREAM_MUSIC,
+                                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+                        );
+
+                        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                            hasAudioFocus = true;
+                            Log.i(logTag, "音频焦点请求成功");
+
+                            // 延迟恢复音频轨道
+                            new Handler().postDelayed(() -> {
+                                if (audioTrack != null && !isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                                    try {
+                                        if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                                            audioTrack.play();
+                                            Log.i(logTag, "音频轨道重新启动");
+                                        }
+                                    } catch (Exception e) {
+                                        Log.e(logTag, "启动音频轨道失败: " + e.getMessage());
+                                    }
+                                }
+                            }, 300);
+
+                            // 延迟开始关键词识别
+                            new Handler().postDelayed(() -> {
+                                if (kwsModel != null && !isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                                    try {
+                                        RegnizeKeyword(speechConfig, kwsModel);
+                                        Log.i(logTag, "关键词识别重新启动");
+                                    } catch (Exception e) {
+                                        Log.e(logTag, "启动关键词识别失败: " + e.getMessage());
+                                    }
+                                }
+                            }, 800);
+                        }
+                    }
+                } else {
+                    Log.i(logTag, "检测到蓝牙连接或蓝牙Fragment活跃，跳过语音功能恢复");
+                }
+            } catch (Exception e) {
+                Log.e(logTag, "安全恢复语音功能时出错: " + e.getMessage());
+            }
+        }
+    }
+
+    private void initializeVoiceSDK() {
+        Log.i(logTag, "初始化语音SDK");
+        try {
+            // 延迟初始化，避免立即干扰蓝牙
+            new Handler().postDelayed(() -> {
+                try {
+                    kwsModel = KeywordRecognitionModel.fromFile(copyAssetToCacheAndGetFilePath(KwsModelFile));
+                    singleThreadExecutor = Executors.newSingleThreadExecutor();
+
+                    // 改进的音频轨道配置，使用更兼容的设置
+                    int bufferSize = AudioTrack.getMinBufferSize(
+                            24000,
+                            AudioFormat.CHANNEL_OUT_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT);
+
+                    // 确保之前的audioTrack被释放
+                    if (audioTrack != null) {
+                        try {
+                            audioTrack.release();
+                        } catch (Exception e) {
+                            Log.w(logTag, "释放旧audioTrack时出错: " + e.getMessage());
+                        }
+                    }
+
+                    audioTrack = new AudioTrack(
+                            new AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                    .build(),
+                            new AudioFormat.Builder()
+                                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                    .setSampleRate(24000)
+                                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                    .build(),
+                            bufferSize * 2, // 使用双倍缓冲区
+                            AudioTrack.MODE_STREAM,
+                            AudioManager.AUDIO_SESSION_ID_GENERATE);
+
+                    // 配置语音参数
+                    speechConfig.setSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Raw24Khz16BitMonoPcm);
+                    speechConfig.setSpeechRecognitionLanguage("zh-CN");
+                    speechConfig.setSpeechSynthesisLanguage("zh-CN");
+                    speechConfig.setSpeechSynthesisVoiceName("zh-CN-XiaoxiaoMultilingualNeural");
+
+                    // 初始化语音合成器
+                    if (synthesizer != null) {
+                        try {
+                            synthesizer.close();
+                        } catch (Exception e) {
+                            Log.w(logTag, "关闭旧synthesizer时出错: " + e.getMessage());
+                        }
+                    }
+
+                    synthesizer = new SpeechSynthesizer(speechConfig, null);
+
+                    if (connection != null) {
+                        try {
+                            connection.close();
+                        } catch (Exception e) {
+                            Log.w(logTag, "关闭旧connection时出错: " + e.getMessage());
+                        }
+                    }
+                    connection = Connection.fromSpeechSynthesizer(synthesizer);
+                    connection.openConnection(true);
+
+                    // 设置合成完成事件监听
+                    synthesizer.SynthesisCompleted.addEventListener((o, e) -> {
+                        Log.i(logTag, "Synthesis finished.");
+                        Log.i(logTag, e.getResult().getProperties().getProperty(PropertyId.SpeechServiceResponse_SynthesisFirstByteLatencyMs) + " ms.");
+                        Log.i(logTag, e.getResult().getProperties().getProperty(PropertyId.SpeechServiceResponse_SynthesisFinishLatencyMs) + " ms.");
+                        e.close();
+                    });
+
+                    isVoiceInitialized = true;
+
+                    // 请求音频焦点
+                    AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                    if (audioManager != null) {
+                        int result = audioManager.requestAudioFocus(
+                                null,
+                                AudioManager.STREAM_MUSIC,
+                                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+                        );
+                        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                            hasAudioFocus = true;
+                        }
+                    }
+
+                    // 延迟开始欢迎语音
+                    new Handler().postDelayed(() -> {
+                        if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                            String hello = "您好，很高兴为您服务，您可以唤醒我说：你好！";
+                            speak(hello, () -> {
+                                if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                                    RegnizeKeyword(speechConfig, kwsModel);
+                                }
+                            });
+                        }
+                    }, 1000);
+
+                } catch (Exception ex) {
+                    Log.e(logTag, "初始化语音SDK失败: " + ex.getMessage());
+                    ex.printStackTrace();
+                }
+            }, 500); // 延迟500毫秒初始化
+        } catch (Exception ex) {
+            Log.e(logTag, "初始化语音SDK失败: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+    }
+
+    private void RegnizeKeyword(SpeechConfig speechConfig, KeywordRecognitionModel kwsModel){
         boolean continuousListeningStarted = false;
         SpeechRecognizer reco = null;
         AudioConfig audioInput = null;
@@ -229,15 +613,18 @@ public class MainActivity extends AppCompatActivity {
         try {
             content.clear();
 
+            // 检查当前状态
+            if (isBluetoothFragmentActive || isVoiceFunctionsPaused) {
+                Log.i(logTag, "当前状态不适合启动关键词识别");
+                return;
+            }
+
             audioInput = AudioConfig.fromStreamInput(createMicrophoneStream());
             reco = new SpeechRecognizer(speechConfig, audioInput);
 
             reco.recognizing.addEventListener((o, speechRecognitionResultEventArgs) -> {
                 final String s = speechRecognitionResultEventArgs.getResult().getText();
                 Log.i(logTag, "Intermediate result received: " + s);
-                //content.add(s);
-                //setRecognizedText(TextUtils.join(" ", content));
-                //content.remove(content.size() - 1);
             });
 
             reco.recognized.addEventListener((o, speechRecognitionResultEventArgs) -> {
@@ -249,11 +636,17 @@ public class MainActivity extends AppCompatActivity {
                     s = "Keyword: " + word;
                     Log.i(logTag, "Keyword recognized result received: " + s);
 
-                // setActionText("已唤醒!");
+                    // 检查状态
+                    if (isBluetoothFragmentActive || isVoiceFunctionsPaused) {
+                        Log.i(logTag, "状态已改变，停止语音处理");
+                        return;
+                    }
+
                     String welcome="我在听请讲。";
-                // setRecognizedText(welcome);
                     speak(welcome,()->{
-                        Regnize(speechConfig);
+                        if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                            Regnize(speechConfig);
+                        }
                     });
 
                 }
@@ -262,107 +655,119 @@ public class MainActivity extends AppCompatActivity {
                     word=speechRecognitionResultEventArgs.getResult().getText();
                     s = "Recognized: " + word;
                     Log.i(logTag, "Final result received: " + s);
-
                 }
-
             });
 
             final Future<Void> task = reco.startKeywordRecognitionAsync(kwsModel);
-            /*setOnTaskCompletedListener(task, result -> {
-
-            });
-            */
         } catch (Exception ex) {
             System.out.println(ex.getMessage());
-            // displayException(ex);
+            Log.e(logTag, "关键词识别启动失败: " + ex.getMessage());
         }
     }
+
     private void Regnize(SpeechConfig speechConfig){
         final String logTag = "reco 1";
 
         try {
-            // In general, if the device default microphone is used then it is enough
-            // to either have AudioConfig.fromDefaultMicrophoneInput or omit the audio
-            // config altogether.
-            // AudioConfig.fromStreamInput is specifically needed if you want to use an
-            // external microphone (including Bluetooth that couldn't be otherwise used)
-            // or mix audio from some other source to microphone audio.
+            // 检查状态
+            if (isBluetoothFragmentActive || isVoiceFunctionsPaused) {
+                Log.i(logTag, "当前状态不适合启动语音识别");
+                return;
+            }
+
             final AudioConfig audioInput = AudioConfig.fromStreamInput(createMicrophoneStream());
             final SpeechRecognizer reco = new SpeechRecognizer(speechConfig, audioInput);
-            // setActionText("倾听中...");
-             task = reco.recognizeOnceAsync();
+            task = reco.recognizeOnceAsync();
             setOnTaskCompletedListener(task, result -> {
                 String s = "";
                 if (result.getReason() == ResultReason.RecognizedSpeech) {
                     s = result.getText();
-                // setRecognizedText(s);
-                    // setActionText("已识别.");
-                    //String errorDetails = (result.getReason() == ResultReason.Canceled) ? CancellationDetails.fromResult(result).getErrorDetails() : "";
-                    //s = "Recognition failed with " + result.getReason() + ". Did you enter your subscription?" + System.lineSeparator() + errorDetails;
                 }else if (result.getReason()==ResultReason.Canceled){
                     reco.close();
                     no_reg_count=0;
-                // setActionText("重置...");
                     Log.i(logTag, "Reset");
+
+                    // 检查状态
+                    if (isBluetoothFragmentActive || isVoiceFunctionsPaused) {
+                        Log.i(logTag, "状态已改变，停止语音处理");
+                        return;
+                    }
+
                     String quit="Let start from begin. Please wait a moment!";
-                // setRecognizedText(quit);
                     speak(quit,()->{
-                        RegnizeKeyword( speechConfig, kwsModel);
+                        if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                            RegnizeKeyword( speechConfig, kwsModel);
+                        }
                     });
                     return;
                 }
 
                 reco.close();
                 Log.i(logTag, "Recognizer returned: " + s);
+
+                // 检查状态
+                if (isBluetoothFragmentActive || isVoiceFunctionsPaused) {
+                    Log.i(logTag, "状态已改变，停止语音处理");
+                    return;
+                }
+
                 if(s==""){
                     no_reg_count+=1;
                     Log.i(logTag, "no_reg_count: " + no_reg_count+"  s:"+s);
-                // setActionText("未能识别.");
                     if (no_reg_count>=3){
                         String quit="我先退下了，您可以再次唤醒我说：你好！";
-                // setRecognizedText(quit);
                         speak(quit,()->{
-                            RegnizeKeyword( speechConfig, kwsModel);
+                            if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                                RegnizeKeyword( speechConfig, kwsModel);
+                            }
                         });
                     }else{
                         String nohear="我没有听清，您还在说话吗？";
-                // setRecognizedText(nohear);
                         speak(nohear,()->{
-                            Regnize(speechConfig);
+                            if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                                Regnize(speechConfig);
+                            }
                         });
                     }
                 }else{
                     no_reg_count=0;
                     String res = ChatAPI.generateText(s);
-                // setRecognizedText(res);
                     speak(res,()->{
-                        Regnize(speechConfig);
+                        if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                            Regnize(speechConfig);
+                        }
                     });
                 }
-
             });
         } catch (Exception ex) {
             System.out.println(ex.getMessage());
-            // displayException(ex);
+            Log.e(logTag, "语音识别启动失败: " + ex.getMessage());
         }
     }
-private void speak(String s,ICallback callback){
-        // setActionText("说话中...");
-    speakingRunnable = new SpeakingRunnable();
-    speakingRunnable.setContent(s);
-    if (callback!=null){
-        speakingRunnable.setCallback(callback);
+
+    private void speak(String s,ICallback callback){
+        // 检查状态
+        if (isBluetoothFragmentActive || isVoiceFunctionsPaused) {
+            Log.i(logTag, "当前状态不适合语音合成");
+            return;
+        }
+
+        speakingRunnable = new SpeakingRunnable();
+        speakingRunnable.setContent(s);
+        if (callback!=null){
+            speakingRunnable.setCallback(callback);
+        }
+        singleThreadExecutor.execute(speakingRunnable);
     }
-    singleThreadExecutor.execute(speakingRunnable);
-}
-
-
-        // 已移除 setRecognizedText、setActionText、displayException 方法
 
     private <T> void setOnTaskCompletedListener(Future<T> task, OnTaskCompletedListener<T> listener) {
         s_executorService.submit(() -> {
             T result = task.get();
-            listener.onCompleted(result);
+            try {
+                listener.onCompleted(result);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
             return null;
         });
     }
@@ -396,153 +801,172 @@ private void speak(String s,ICallback callback){
         s_executorService = Executors.newCachedThreadPool();
     }
 
-    public class Word {
-        public String word;
-        public String errorType;
-        public double accuracyScore;
-        public long duration;
-        public long offset;
-        public Word(String word, String errorType) {
-            this.word = word;
-            this.errorType = errorType;
-        }
-
-        public Word(String word, String errorType, double accuracyScore, long duration, long offset) {
-            this(word, errorType);
-            this.accuracyScore = accuracyScore;
-            this.duration = duration;
-            this.offset = offset;
-        }
+    // 提供给Fragment使用的蓝牙服务获取方法
+    public BluetoothService getBluetoothService() {
+        return bluetoothService;
     }
+
+    public boolean isBluetoothServiceBound() {
+        return isBluetoothServiceBound;
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
 
-        // Release speech synthesizer and its dependencies
-        if (synthesizer != null) {
-            synthesizer.close();
-            connection.close();
-        }
-        if (speechConfig != null) {
-            speechConfig.close();
+        Log.i(logTag, "MainActivity onDestroy开始清理资源");
+
+        // 首先标记为停止状态
+        isBluetoothFragmentActive = true;
+        isVoiceFunctionsPaused = true;
+
+        // 停止语音功能
+        pauseVoiceFunctions();
+
+        // 解绑蓝牙服务
+        if (isBluetoothServiceBound) {
+            try {
+                unbindService(bluetoothServiceConnection);
+                isBluetoothServiceBound = false;
+                Log.i(logTag, "蓝牙服务已解绑");
+            } catch (Exception e) {
+                Log.e(logTag, "解绑蓝牙服务失败: " + e.getMessage());
+            }
         }
 
-        if (audioTrack != null) {
-            singleThreadExecutor.shutdownNow();
-            audioTrack.flush();
-            audioTrack.stop();
-            audioTrack.release();
+        // 释放语音合成器资源
+        if (synthesizer != null) {
+            try {
+                synthesizer.close();
+                Log.i(logTag, "语音合成器已关闭");
+            } catch (Exception e) {
+                Log.e(logTag, "关闭语音合成器失败: " + e.getMessage());
+            }
         }
+        if (connection != null) {
+            try {
+                connection.close();
+                Log.i(logTag, "连接已关闭");
+            } catch (Exception e) {
+                Log.e(logTag, "关闭连接失败: " + e.getMessage());
+            }
+        }
+
+        // 释放音频轨道资源
+        if (audioTrack != null) {
+            try {
+                if (singleThreadExecutor != null) {
+                    singleThreadExecutor.shutdownNow();
+                    Log.i(logTag, "线程池已关闭");
+                }
+                audioTrack.stop();
+                audioTrack.release();
+                Log.i(logTag, "音频轨道已释放");
+            } catch (Exception e) {
+                Log.e(logTag, "释放音频轨道失败: " + e.getMessage());
+            }
+        }
+
+        // 释放麦克风资源
+        releaseMicrophoneStream();
+
+        Log.i(logTag, "MainActivity资源清理完成");
     }
+
     interface ICallback {
         void Callback();
     }
+
     class SpeakingRunnable implements Runnable {
         private String content;
         private ICallback _callback;
         private ICallback _stopCallback;
+        private volatile boolean shouldStop = false;
+
         public void setContent(String content) {
             this.content = content;
         }
-        public void setCallback(ICallback callback){
+
+        public void setCallback(ICallback callback) {
             _callback = callback;
         }
-        public void stop(ICallback stopCallback){
-            stopped=true;
-            _stopCallback=stopCallback;
+
+        public void stop(ICallback stopCallback) {
+            shouldStop = true;
+            _stopCallback = stopCallback;
+            // 安全停止音频轨道播放
+            if (audioTrack != null) {
+                try {
+                    if (audioTrack.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) {
+                        audioTrack.pause();
+                    }
+                } catch (Exception e) {
+                    Log.e(logTag, "停止音频轨道时出错: " + e.getMessage());
+                }
+            }
         }
+
         @Override
         public void run() {
             try {
-                audioTrack.play();
+                // 检查是否需要停止
+                if (shouldStop || isBluetoothFragmentActive || isVoiceFunctionsPaused) {
+                    if (_stopCallback != null) {
+                        _stopCallback.Callback();
+                    }
+                    return;
+                }
+
+                // 安全启动音频轨道
+                if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                    try {
+                        audioTrack.play();
+                    } catch (Exception e) {
+                        Log.e(logTag, "启动音频轨道失败: " + e.getMessage());
+                        return;
+                    }
+                }
+
                 synchronized (synchronizedObj) {
                     stopped = false;
                 }
-                //SSML
-                //SpeechSynthesisResult result = synthesizer.StartSpeakingTextAsync(content).get();
+
                 String ssmlContent = "<speak xmlns=\"http://www.w3.org/2001/10/synthesis\" xmlns:mstts=\"http://www.w3.org/2001/mstts\" xmlns:emo=\"http://www.w3.org/2009/10/emotionml\" version=\"1.0\"  xml:lang=\"zh-CN\"><voice name=\"zh-CN-XiaoxiaoMultilingualNeural\"><lang xml:lang=\"zh-CN\"><prosody rate=\"17%\">"+content.replace("*"," ")+"</prosody></lang></voice></speak> ";
 
                 SpeechSynthesisResult result = synthesizer.StartSpeakingSsmlAsync(ssmlContent).get();
                 AudioDataStream audioDataStream = AudioDataStream.fromResult(result);
 
-                // Set the chunk size to 50 ms. 24000 * 16 * 0.05 / 8 = 2400
                 byte[] buffer = new byte[2400];
-                while (!stopped) {
+                while (!shouldStop && !stopped && !isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
                     long len = audioDataStream.readData(buffer);
                     if (len == 0) {
                         break;
                     }
-                    audioTrack.write(buffer, 0, (int) len);
+                    if (!shouldStop && audioTrack != null) {
+                        try {
+                            audioTrack.write(buffer, 0, (int) len);
+                        } catch (Exception e) {
+                            Log.e(logTag, "写入音频数据失败: " + e.getMessage());
+                            break;
+                        }
+                    }
                 }
 
                 audioDataStream.close();
-                if (_stopCallback!=null){
+
+                if (shouldStop && _stopCallback != null) {
                     _stopCallback.Callback();
-                    _stopCallback=null;
                     return;
                 }
-                if (_callback!=null){
+
+                // 再次检查状态
+                if (!shouldStop && !isBluetoothFragmentActive && !isVoiceFunctionsPaused && _callback != null) {
                     _callback.Callback();
                 }
             } catch (Exception ex) {
                 Log.e("Speech Synthesis Demo", "unexpected " + ex.getMessage());
                 ex.printStackTrace();
-                assert(false);
             }
         }
-    }
-
-    private void dispatchTakePictureIntent() {
-        Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        // 确保有摄像头应用可以处理该 Intent
-        if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
-            // 创建文件保存照片
-            File photoFile = null;
-            try {
-                photoFile = createImageFile();
-            } catch (IOException ex) {
-                // 处理文件创建失败的情况
-                ex.printStackTrace();
-            }
-            // 如果文件创建成功
-            if (photoFile != null) {
-                Uri photoURI = FileProvider.getUriForFile(this,
-                        "com.example.android.fileprovider",
-                        photoFile);
-                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
-                startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
-            }
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
-            // 获取照片文件
-            File imgFile = new File(currentPhotoPath);
-            if (imgFile.exists()) {
-                // 处理照片
-                // 例如，显示在 ImageView 中
-                // ImageView imageView = findViewById(R.id.imageView);
-                // imageView.setImageURI(Uri.fromFile(imgFile));
-            }
-        }
-    }
-
-    private File createImageFile() throws IOException {
-        // 创建以时间戳命名的图像文件名
-        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        String imageFileName = "JPEG_" + timeStamp + "_";
-        File storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-        File image = File.createTempFile(
-                imageFileName,  /* 前缀 */
-                ".jpg",         /* 后缀 */
-                storageDir      /* 目录 */
-        );
-
-        // 保存文件路径供后续使用
-        currentPhotoPath = image.getAbsolutePath();
-        return image;
     }
 }
