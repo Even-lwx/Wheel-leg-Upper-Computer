@@ -57,11 +57,22 @@ adb logcat -s MainActivity BluetoothService BluetoothRemoteFragment ChatAPI
 
 **BluetoothService** (后台服务，持久运行)：
 - 使用 SPP 协议（UUID: `00001101-0000-1000-8000-00805F9B34FB`）
-- 支持三种连接策略：标准 UUID → 反射方法 → 不安全连接
+- **三层连接策略**（自动降级尝试）：
+  1. 标准 `createRfcommSocketToServiceRecord(UUID)`
+  2. 反射方法 `createRfcommSocket(1)`
+  3. 不安全连接 `createInsecureRfcommSocketToServiceRecord(UUID)`
 - 异步数据收发，单独的读取线程
-- 自动重连机制通过广播接收器监听连接状态
+- 自动重连机制通过 `BroadcastReceiver` 监听连接状态
+- 服务绑定器模式：使用 `LocalBinder` 与 Activity/Fragment 通信
+- 连接状态回调接口：`BluetoothConnectionListener`
 
-**遥控命令定义**：
+**关键方法**：
+- `connectToDevice(BluetoothDevice)`: 建立连接
+- `sendData(String)`: 发送命令
+- `startReading()`: 启动异步数据读取线程
+- `disconnect()`: 断开连接并清理资源
+
+**遥控命令定义** (单字符协议)：
 ```java
 前进: "1"
 后退: "2"
@@ -73,18 +84,24 @@ adb logcat -s MainActivity BluetoothService BluetoothRemoteFragment ChatAPI
 ### 3. 语音识别与合成流程
 
 **初始化流程**：
-1. MainActivity.checkAndRequestPermissions() - 请求权限
-2. initializeVoiceSDK() - 初始化 Azure Speech SDK
-3. 配置 AudioTrack (24kHz, 16bit, Mono)
+1. `MainActivity.checkAndRequestPermissions()` - 检查和请求必要权限
+2. `initializeVoiceSDK()` - 初始化 Azure Speech SDK
+3. 配置 `AudioTrack` (24kHz, 16bit, Mono)
 4. 建立 WebSocket 连接到 Azure 服务
-5. 加载关键词模型 (`nihao.table`)
+5. 加载关键词模型 (`nihao.table` 文件)
+6. 启动关键词识别器 `KeywordRecognizer`
 
 **语音交互循环**：
 ```
-关键词识别 → 唤醒提示 → 连续识别 → DeepSeek AI → 语音合成 → 返回识别
-                           ↓ (3次未听清)
-                       退出到关键词识别
+关键词识别 → 唤醒提示音 → 连续识别 → DeepSeek AI 对话 → 语音合成播报 → 返回识别
+                                  ↓ (3次未听清或超时)
+                              退出到关键词识别
 ```
+
+**ChatAPI 消息管理**：
+- 保留最近 10 条消息避免 token 溢出
+- 自动剔除开头的 `tool` 角色消息保证对话连贯性
+- 使用 Jackson ObjectMapper 处理 JSON 序列化
 
 **状态管理关键点**：
 - `isBluetoothFragmentActive`: 控制是否暂停语音功能
@@ -96,39 +113,52 @@ adb logcat -s MainActivity BluetoothService BluetoothRemoteFragment ChatAPI
 为防止语音功能干扰蓝牙连接，实现了完整的状态隔离：
 
 ```java
-// 切换到蓝牙 Fragment 时
+// 切换到蓝牙 Fragment 时 (MainActivity)
 pauseVoiceFunctions() {
-    - 停止语音播放
+    - 停止语音播放和识别
     - 释放麦克风资源
     - 暂停 AudioTrack
-    - 延迟放弃音频焦点
+    - 延迟 500ms 放弃音频焦点（避免冲突）
+    - 设置 isVoiceFunctionsPaused = true
 }
 
-// 切换回语音 Fragment 时
+// 切换回语音 Fragment 时 (MainActivity)
 resumeVoiceFunctions() {
-    - 检查蓝牙音频状态
-    - 延迟初始化语音功能
+    - 检查蓝牙音频状态（避免冲突）
+    - 延迟 1500ms 初始化语音功能
     - 重新请求音频焦点
     - 恢复关键词识别
+    - 设置 isVoiceFunctionsPaused = false
 }
 ```
 
+**延迟设计原因**：
+- 音频资源释放需要时间
+- 防止 Fragment 快速切换导致资源竞争
+- 确保蓝牙音频优先级高于语音功能
+
 ## 配置说明
 
-### 必须配置的 API 密钥
+### ⚠️ 必须配置的 API 密钥
 
-在生产环境部署前，必须替换以下文件中的占位符：
+**重要**: 代码中当前包含占位符 API 密钥，必须替换为真实密钥后才能正常运行。
 
-**MainActivity.java:94-96**
+**MainActivity.java** (约第 94-96 行)：
 ```java
 private static final String SpeechSubscriptionKey = "xxxx"; // Azure Speech Key
 private static final String SpeechRegion = "eastus";        // Azure Region
 ```
 
-**ChatAPI.java:57**
+**ChatAPI.java** (约第 57 行)：
 ```java
 connection.setRequestProperty("Authorization", "Bearer xxxx"); // DeepSeek API Key
 ```
+
+DeepSeek API 配置：
+- 端点: `https://api.deepseek.com/chat/completions`
+- 模型: `deepseek-chat`
+- 温度: 0.6
+- 最大 Tokens: 500
 
 ### 关键词模型文件
 
@@ -137,7 +167,18 @@ connection.setRequestProperty("Authorization", "Bearer xxxx"); // DeepSeek API K
 修改唤醒词需要：
 1. 使用 Azure Speech Studio 生成新的 `.table` 文件
 2. 替换 assets 中的文件
-3. 更新 `MainActivity.java:105` 中的 `KwsModelFile` 常量
+3. 更新 MainActivity.java 中的 `KwsModelFile` 常量
+
+### UI 资源结构
+
+应用使用圆角设计和主题色系统：
+- 主题色: `#BD5742` (棕红色)
+- 圆角背景 drawable：`bg_rounded_*.xml` 系列
+- 布局文件：
+  - `activity_main.xml`: 主容器 + BottomNavigationView
+  - `fragment_placeholder.xml`: 语音助手界面 (简洁设计)
+  - `fragment_bluetooth_remote.xml`: 蓝牙遥控界面 (复杂控制面板)
+- 底部导航菜单: `menu/bottom_nav_menu.xml`
 
 ## 关键依赖
 
@@ -153,17 +194,34 @@ implementation 'org.apache.httpcomponents:httpclient-android:4.3.5.1'
 
 // Diff 工具（发音评估）
 implementation 'io.github.java-diff-utils:java-diff-utils:4.11'
+
+// Glide (GIF 动画支持)
+implementation 'com.github.bumptech.glide:glide:4.12.0'
+
+// Material Design 组件
+implementation 'com.google.android.material:material:1.5.0'
 ```
+
+**编译配置**:
+- `compileSdk`: 36
+- `minSdkVersion`: 26 (Android 8.0)
+- `targetSdkVersion`: 31 (Android 12)
+- Java 版本: 1.8
+- 必须启用参数名编译: `options.compilerArgs += ['-parameters']`
 
 ## 权限需求
 
-应用需要以下运行时权限（自动请求）：
+应用需要以下运行时权限（MainActivity 自动请求）：
 
 - `RECORD_AUDIO`: 语音识别
 - `INTERNET`: AI 对话和 TTS
 - `BLUETOOTH_CONNECT/SCAN`: 蓝牙通信 (Android 12+)
 - `BLUETOOTH/BLUETOOTH_ADMIN`: 蓝牙通信 (Android 11-)
-- `ACCESS_FINE_LOCATION`: 蓝牙设备发现
+- `ACCESS_FINE_LOCATION/ACCESS_COARSE_LOCATION`: 蓝牙设备发现
+- `VIBRATE`: 震动反馈
+- `READ_EXTERNAL_STORAGE`: 读取外部存储
+
+**AndroidManifest.xml** 中已声明所有必要权限，但部分权限需要运行时动态授予。
 
 ## 常见问题定位
 
@@ -189,11 +247,25 @@ implementation 'io.github.java-diff-utils:java-diff-utils:4.11'
 
 ## 代码风格说明
 
-- 日志输出使用中文描述，便于本地化调试
-- 注释语言：中文（项目主语言）
-- 使用 emoji 增强用户体验（蓝牙界面）
-- 异步操作统一使用 Thread 或 ExecutorService
-- 避免在主线程进行网络和蓝牙操作
+- **注释语言**: 中文（项目主语言）
+- **日志标签**: 使用类名作为 TAG，便于 logcat 过滤
+- **日志输出**: 使用中文描述，便于本地化调试
+- **UI 文本**: 使用 emoji 增强用户体验（蓝牙界面）
+- **异步操作**: 统一使用 `Thread` 或 `ExecutorService`
+- **主线程保护**: 避免在主线程进行网络和蓝牙操作
+- **资源命名**: 使用前缀区分资源类型（`bg_`、`btn_`、`fragment_` 等）
+
+## 核心类职责划分
+
+| 类名 | 职责 | 关键特性 |
+|------|------|----------|
+| `MainActivity` | 生命周期管理、Fragment 切换、服务绑定 | 音频焦点管理、权限请求 |
+| `PlaceholderFragment` | 语音助手 UI | GIF 动画、简洁界面 |
+| `BluetoothRemoteFragment` | 蓝牙遥控 UI | 设备列表、遥控按钮 |
+| `BluetoothService` | 蓝牙后台服务 | 持久连接、异步 IO |
+| `ChatAPI` | DeepSeek AI 接口 | HTTP 调用、JSON 解析、消息历史管理 |
+| `MicrophoneStream` | 麦克风输入流 | 音频数据采集 |
+| `CustomTools` | 工具类 | 通用辅助方法 |
 
 ## 测试建议
 

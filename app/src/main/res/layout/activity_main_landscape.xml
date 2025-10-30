@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackgroundLight">
+
+    <!-- 横屏时的全屏眼睛动画 -->
+    <ImageView
+        android:id="@+id/landscape_eye_animation"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="眼睛动画"
+        android:adjustViewBounds="true"
+        android:scaleType="centerInside" />
+
+</FrameLayout>

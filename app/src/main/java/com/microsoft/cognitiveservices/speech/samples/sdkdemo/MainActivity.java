@@ -10,12 +10,16 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.res.Configuration;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
 import android.os.Handler;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.ImageView;
 
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
@@ -74,6 +78,12 @@ public class MainActivity extends AppCompatActivity {
 
     // 添加音频焦点状态
     private boolean hasAudioFocus = false;
+
+    // 横屏相关
+    private boolean isLandscapeMode = false;
+    private ImageView landscapeEyeAnimation;
+    private View fragmentContainer;
+    private com.google.android.material.bottomnavigation.BottomNavigationView bottomNavigationView;
 
     // 添加蓝牙连接状态监听器
     public interface BluetoothConnectionListener {
@@ -191,6 +201,13 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         Log.d(logTag, "MainActivity onCreate");
 
+        // 获取布局组件引用
+        fragmentContainer = findViewById(R.id.fragment_container);
+        bottomNavigationView = findViewById(R.id.bottom_navigation);
+        
+        // 检查当前屏幕方向
+        checkOrientation();
+
         // 首先检查并请求必要的权限
         checkAndRequestPermissions();
 
@@ -206,9 +223,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }, 1000);
 
-        // 底部导航栏点击事件
-        com.google.android.material.bottomnavigation.BottomNavigationView bottomNavigationView = findViewById(R.id.bottom_navigation);
-
         // 默认显示语音助手Fragment
         try {
             replaceFragment(new PlaceholderFragment());
@@ -217,6 +231,7 @@ public class MainActivity extends AppCompatActivity {
             Log.e(logTag, "设置默认Fragment失败: " + e.getMessage());
         }
 
+        // 底部导航栏点击事件
         bottomNavigationView.setOnItemSelectedListener(item -> {
             Fragment fragment = null;
             try {
@@ -248,6 +263,155 @@ public class MainActivity extends AppCompatActivity {
             }
             return false;
         });
+    }
+
+    // 检测屏幕方向
+    private void checkOrientation() {
+        int orientation = getResources().getConfiguration().orientation;
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            switchToLandscapeMode();
+        } else {
+            switchToPortraitMode();
+        }
+    }
+
+    // 切换到横屏模式
+    private void switchToLandscapeMode() {
+        if (isLandscapeMode) return;
+        
+        Log.d(logTag, "切换到横屏沉浸式模式");
+        isLandscapeMode = true;
+        
+        // 隐藏系统UI实现沉浸式体验
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
+        
+        // 隐藏ActionBar
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
+        }
+        
+        // 隐藏底部导航栏和Fragment容器
+        if (bottomNavigationView != null) {
+            bottomNavigationView.setVisibility(View.GONE);
+        }
+        if (fragmentContainer != null) {
+            fragmentContainer.setVisibility(View.GONE);
+        }
+        
+        // 加载横屏布局的眼睛动画
+        setContentView(R.layout.activity_main_landscape);
+        landscapeEyeAnimation = findViewById(R.id.landscape_eye_animation);
+        
+        // 使用Glide加载GIF动画
+        try {
+            com.bumptech.glide.Glide.with(this)
+                    .asGif()
+                    .load(R.drawable.welcome_animation)
+                    .into(landscapeEyeAnimation);
+            Log.d(logTag, "横屏眼睛动画已加载");
+        } catch (Exception e) {
+            Log.e(logTag, "加载横屏动画失败: " + e.getMessage());
+        }
+        
+        // 后台服务(语音、蓝牙)继续运行，不做任何改变
+        Log.d(logTag, "后台服务继续运行");
+    }
+
+    // 切换到竖屏模式
+    private void switchToPortraitMode() {
+        if (!isLandscapeMode) return;
+        
+        Log.d(logTag, "切换回竖屏正常模式");
+        isLandscapeMode = false;
+        
+        // 清除所有全屏标志，恢复系统UI
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+        );
+        
+        // 清除Window的全屏标志
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        
+        // 恢复正常布局
+        setContentView(R.layout.activity_main);
+        
+        // 重新获取组件引用
+        fragmentContainer = findViewById(R.id.fragment_container);
+        bottomNavigationView = findViewById(R.id.bottom_navigation);
+        
+        // 显示ActionBar
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().show();
+        }
+        
+        // 恢复Fragment和导航栏
+        if (bottomNavigationView != null) {
+            bottomNavigationView.setVisibility(View.VISIBLE);
+            
+            // 重新设置导航栏监听器
+            bottomNavigationView.setOnItemSelectedListener(item -> {
+                Fragment fragment = null;
+                try {
+                    if (item.getItemId() == R.id.navigation_bluetooth) {
+                        fragment = new BluetoothRemoteFragment();
+                        isBluetoothFragmentActive = true;
+                        pauseVoiceFunctions();
+                        if (bluetoothConnectionListener != null) {
+                            bluetoothConnectionListener.onBluetoothFragmentResumed();
+                        }
+                        Log.d(logTag, "切换到蓝牙Fragment");
+                    } else if (item.getItemId() == R.id.navigation_voice_assistant) {
+                        fragment = new PlaceholderFragment();
+                        isBluetoothFragmentActive = false;
+                        resumeVoiceFunctions();
+                        if (bluetoothConnectionListener != null) {
+                            bluetoothConnectionListener.onBluetoothFragmentPaused();
+                        }
+                        Log.d(logTag, "切换到语音Fragment");
+                    }
+                    if (fragment != null) {
+                        replaceFragment(fragment);
+                        return true;
+                    }
+                } catch (Exception e) {
+                    Log.e(logTag, "切换Fragment失败: " + e.getMessage());
+                }
+                return false;
+            });
+            
+            // 恢复当前显示的Fragment
+            try {
+                if (isBluetoothFragmentActive) {
+                    replaceFragment(new BluetoothRemoteFragment());
+                } else {
+                    replaceFragment(new PlaceholderFragment());
+                }
+            } catch (Exception e) {
+                Log.e(logTag, "恢复Fragment失败: " + e.getMessage());
+            }
+        }
+        
+        if (fragmentContainer != null) {
+            fragmentContainer.setVisibility(View.VISIBLE);
+        }
+        
+        Log.d(logTag, "竖屏正常模式已恢复");
+    }
+
+    // 监听屏幕方向变化
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        Log.d(logTag, "屏幕方向改变: " + newConfig.orientation);
+        checkOrientation();
     }
 
     // 检查并请求权限
