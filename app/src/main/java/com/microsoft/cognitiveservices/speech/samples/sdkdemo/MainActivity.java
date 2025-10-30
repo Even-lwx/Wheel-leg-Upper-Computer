@@ -331,17 +331,31 @@ public class MainActivity extends AppCompatActivity {
         Log.d(logTag, "切换回竖屏正常模式");
         isLandscapeMode = false;
         
-        // 清除所有全屏标志，恢复系统UI
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+        // 步骤1: 清除所有系统UI标志
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+        
+        // 步骤2: 清除所有Window标志
+        getWindow().clearFlags(
+                WindowManager.LayoutParams.FLAG_FULLSCREEN 
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         );
         
-        // 清除Window的全屏标志
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        // 步骤3: 强制设置为非全屏模式
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
         
-        // 恢复正常布局
+        // 步骤4: 先恢复ActionBar
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().show();
+        }
+        
+        // 步骤5: 恢复正常布局
         setContentView(R.layout.activity_main);
+        
+        // 步骤6: 等待布局完成后再刷新
+        getWindow().getDecorView().post(() -> {
+            getWindow().getDecorView().requestLayout();
+        });
         
         // 重新获取组件引用
         fragmentContainer = findViewById(R.id.fragment_container);
