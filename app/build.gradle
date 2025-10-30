@@ -3,6 +3,7 @@ plugins {
 }
 
 android {
+    namespace 'com.microsoft.cognitiveservices.speech.samples.sdkdemo'
     compileSdkVersion 31
     defaultConfig {
         applicationId "com.microsoft.cognitiveservices.speech.samples.sdkdemo"

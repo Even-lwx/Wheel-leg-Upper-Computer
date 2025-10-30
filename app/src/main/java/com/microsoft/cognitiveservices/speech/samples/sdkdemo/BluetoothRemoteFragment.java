@@ -220,6 +220,8 @@ public class BluetoothRemoteFragment extends Fragment {
                 requireActivity().runOnUiThread(() -> {
                     tvStatus.setText("状态：连接成功 " + (device.getName() != null ? device.getName() : device.getAddress()));
                     Toast.makeText(getContext(), "连接成功", Toast.LENGTH_SHORT).show();
+                    // 连接成功后跳转到聊天窗口
+                    openChatFragment(device);
                 });
             } catch (Exception e) {
                 requireActivity().runOnUiThread(() -> {
@@ -229,6 +231,19 @@ public class BluetoothRemoteFragment extends Fragment {
                 e.printStackTrace();
             }
         }).start();
+    }
+
+    // 跳转到蓝牙聊天窗口
+    private void openChatFragment(BluetoothDevice device) {
+        BluetoothChatFragment chatFragment = new BluetoothChatFragment();
+        Bundle args = new Bundle();
+        args.putParcelable("device", device);
+        chatFragment.setArguments(args);
+        
+        getParentFragmentManager().beginTransaction()
+                .replace(R.id.fragment_container, chatFragment)
+                .addToBackStack(null)
+                .commit();
     }
 
     @Override

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/tv_chat_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="未连接蓝牙"
+        android:textSize="16sp"
+        android:textColor="#333333"
+        android:paddingBottom="8dp"/>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#f5f5f5"
+        android:padding="8dp">
+        <TextView
+            android:id="@+id/tv_chat_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="15sp"
+            android:textColor="#222222"/>
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="8dp">
+        <EditText
+            android:id="@+id/et_chat_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="输入要发送的内容"
+            android:textSize="15sp"
+            android:background="#ffffff"
+            android:padding="8dp"/>
+        <Button
+            android:id="@+id/btn_chat_send"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="发送"
+            android:textSize="15sp"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"/>
+    </LinearLayout>
+</LinearLayout>
