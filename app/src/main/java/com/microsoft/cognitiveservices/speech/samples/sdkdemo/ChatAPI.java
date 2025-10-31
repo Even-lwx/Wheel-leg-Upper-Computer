@@ -1,4 +1,5 @@
 package com.microsoft.cognitiveservices.speech.samples.sdkdemo;
+import android.content.Context;
 import android.util.Log;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -24,12 +25,24 @@ public class ChatAPI {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static List<JsonNode> messages = new ArrayList<>();
+    private static Context appContext; // 用于获取人格配置
+
+    /**
+     * 初始化 ChatAPI,设置上下文
+     * 必须在使用前调用
+     */
+    public static void initialize(Context context) {
+        appContext = context.getApplicationContext();
+    }
 
     public static String getChatDeployment() {
         return "";
     }
 
     public static JsonNode getLLMResponse(List<JsonNode> messages, List<JsonNode> tools) throws IOException {
+        // 确保第一条消息是 system prompt
+        ensureSystemPrompt(messages);
+
         int i = 10;
         List<JsonNode> messagesAi = messages.subList(Math.max(messages.size() - i, 0), messages.size());
 
@@ -42,20 +55,29 @@ public class ChatAPI {
         ArrayNode messagesArray = objectMapper.createArrayNode();
         messagesArray.addAll(messagesAi);
         //Log.i("ChatAPI","messages: "+messagesArray);
-        requestBody.put("model", "deepseek-chat");
+        requestBody.put("model", VoiceConfig.DEEPSEEK_MODEL);
         requestBody.set("messages", messagesArray);
-        requestBody.put("temperature", 0.6);
-        requestBody.put("max_tokens", 500);
+
+        // 使用当前人格的 temperature 参数
+        double temperature = appContext != null ?
+            VoicePersonality.getCurrentTemperature(appContext) : 0.4;
+        requestBody.put("temperature", temperature);
+
+        requestBody.put("max_tokens", VoiceConfig.DEEPSEEK_MAX_TOKENS);
         //requestBody.set("tools", objectMapper.valueToTree(tools));
         //requestBody.put("tool_choice", "auto");
         requestBody.put("stream", false);
 
-        URL url = new URL("https://api.deepseek.com/chat/completions"); // Replace with actual API endpoint
+        URL url = new URL(VoiceConfig.DEEPSEEK_API_URL);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "application/json");
-        connection.setRequestProperty("Authorization", "Bearer sk-14aea57216d942e98ff2b105ba3aca65"); // Replace with actual API key
+        connection.setRequestProperty("Authorization", "Bearer " + VoiceConfig.DEEPSEEK_API_KEY);
         connection.setDoOutput(true);
+        
+        // 设置超时时间（毫秒）
+        connection.setConnectTimeout(30000);  // 连接超时：30秒
+        connection.setReadTimeout(60000);     // 读取超时：60秒
 
         try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(connection.getOutputStream()))) {
             writer.write(objectMapper.writeValueAsString(requestBody));
@@ -124,9 +146,13 @@ public class ChatAPI {
         userMessage.put("content", prompt);
         messages.add(userMessage);
 
-        List<JsonNode> tools =getTools();
+        List<JsonNode> tools = getTools();
         JsonNode response = runConversation(messages, tools);
         String r = response.get("content").asText();
+
+        // 清理 Markdown 格式化符号,确保 TTS 朗读流畅
+        r = cleanTextForTTS(r);
+
         //Log.i("ChatAPI", "r: " + r);
         ObjectNode assistantMessage = objectMapper.createObjectNode();
         assistantMessage.put("role", "assistant");
@@ -202,5 +228,78 @@ public class ChatAPI {
             e.printStackTrace();
             return null;
         }
+    }
+
+    /**
+     * 确保对话历史中包含 System Prompt
+     * 如果消息列表为空或第一条不是 system 角色,则添加
+     */
+    private static void ensureSystemPrompt(List<JsonNode> messages) {
+        if (appContext == null) {
+            Log.w(VoiceConfig.LOG_TAG_CHAT_API, "ChatAPI 未初始化,无法获取人格配置");
+            return;
+        }
+
+        // 如果消息列表为空,或第一条消息不是 system 角色,则添加 system prompt
+        if (messages.isEmpty() || !messages.get(0).has("role") ||
+            !"system".equals(messages.get(0).get("role").asText())) {
+
+            String systemPrompt = VoicePersonality.getCurrentSystemPrompt(appContext);
+            ObjectNode systemMessage = objectMapper.createObjectNode();
+            systemMessage.put("role", "system");
+            systemMessage.put("content", systemPrompt);
+            messages.add(0, systemMessage); // 插入到第一条
+            Log.i(VoiceConfig.LOG_TAG_CHAT_API, "添加 System Prompt: " +
+                VoicePersonality.getCurrentPersonalityName(appContext));
+        }
+    }
+
+    /**
+     * 清理文本中的 Markdown 格式化符号,确保 TTS 朗读流畅
+     *
+     * @param text 原始文本
+     * @return 清理后的文本
+     */
+    private static String cleanTextForTTS(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+
+        return text
+            // 移除标题符号 (##, ###, ####等)
+            .replaceAll("#{1,6}\\s*", "")
+            // 移除粗体符号 (**)
+            .replaceAll("\\*\\*", "")
+            // 移除斜体符号 (*)
+            .replaceAll("\\*", "")
+            // 移除代码符号 (`)
+            .replaceAll("`", "")
+            // 移除列表符号 (行首的 - 或 *)
+            .replaceAll("(?m)^[-*]\\s+", "")
+            // 移除引用符号 (>)
+            .replaceAll("(?m)^>\\s*", "")
+            // 移除链接格式 [text](url) → text
+            .replaceAll("\\[([^\\]]+)\\]\\([^)]+\\)", "$1")
+            // 移除图片格式 ![alt](url) → alt
+            .replaceAll("!\\[([^\\]]*)]\\([^)]+\\)", "$1")
+            // 段落换行转为逗号 (便于朗读停顿)
+            .replaceAll("\\n\\n+", "，")
+            // 移除单个换行符
+            .replaceAll("\\n", " ")
+            // 移除删除线符号 (~~)
+            .replaceAll("~~", "")
+            // 移除水平分隔线 (---, ***)
+            .replaceAll("(?m)^[-*_]{3,}$", "")
+            // 清理多余空格
+            .replaceAll("\\s{2,}", " ")
+            .trim();
+    }
+
+    /**
+     * 重置对话历史 (切换人格或清空对话时调用)
+     */
+    public static void resetConversation() {
+        messages.clear();
+        Log.i(VoiceConfig.LOG_TAG_CHAT_API, "对话历史已重置");
     }
 }

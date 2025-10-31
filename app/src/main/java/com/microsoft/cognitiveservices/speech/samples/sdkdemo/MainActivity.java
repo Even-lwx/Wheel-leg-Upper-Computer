@@ -233,7 +233,7 @@ public class MainActivity extends AppCompatActivity {
 
         // 默认显示语音助手Fragment
         try {
-            replaceFragment(new PlaceholderFragment());
+            replaceFragment(new PlaceholderFragment(), false);
             Log.d(logTag, "默认Fragment已设置");
         } catch (Exception e) {
             Log.e(logTag, "设置默认Fragment失败: " + e.getMessage());
@@ -242,9 +242,11 @@ public class MainActivity extends AppCompatActivity {
         // 底部导航栏点击事件
         bottomNavigationView.setOnItemSelectedListener(item -> {
             Fragment fragment = null;
+            boolean toRight = false; // 切换方向标志
             try {
                 if (item.getItemId() == R.id.navigation_bluetooth) {
                     fragment = new BluetoothRemoteFragment();
+                    toRight = true; // 语音→蓝牙,向右滑动
                     isBluetoothFragmentActive = true;
                     // 切换到蓝牙时暂停语音功能
                     pauseVoiceFunctions();
@@ -254,6 +256,7 @@ public class MainActivity extends AppCompatActivity {
                     Log.d(logTag, "切换到蓝牙Fragment");
                 } else if (item.getItemId() == R.id.navigation_voice_assistant) {
                     fragment = new PlaceholderFragment();
+                    toRight = false; // 蓝牙→语音,向左滑动
                     isBluetoothFragmentActive = false;
                     // 切换到语音时恢复语音功能
                     resumeVoiceFunctions();
@@ -263,7 +266,7 @@ public class MainActivity extends AppCompatActivity {
                     Log.d(logTag, "切换到语音Fragment");
                 }
                 if (fragment != null) {
-                    replaceFragment(fragment);
+                    replaceFragment(fragment, toRight); // 传入方向参数
                     return true;
                 }
             } catch (Exception e) {
@@ -286,10 +289,10 @@ public class MainActivity extends AppCompatActivity {
     // 切换到横屏模式
     private void switchToLandscapeMode() {
         if (isLandscapeMode) return;
-        
+
         Log.d(logTag, "切换到横屏沉浸式模式");
         isLandscapeMode = true;
-        
+
         // 隐藏系统UI实现沉浸式体验
         getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -299,12 +302,12 @@ public class MainActivity extends AppCompatActivity {
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         );
-        
+
         // 隐藏ActionBar
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
-        
+
         // 隐藏底部导航栏和Fragment容器
         if (bottomNavigationView != null) {
             bottomNavigationView.setVisibility(View.GONE);
@@ -312,11 +315,14 @@ public class MainActivity extends AppCompatActivity {
         if (fragmentContainer != null) {
             fragmentContainer.setVisibility(View.GONE);
         }
-        
+
         // 加载横屏布局的眼睛动画
         setContentView(R.layout.activity_main_landscape);
         landscapeEyeAnimation = findViewById(R.id.landscape_eye_animation);
-        
+
+        // 添加淡入动画效果
+        overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
+
         // 使用Glide加载GIF动画
         try {
             com.bumptech.glide.Glide.with(this)
@@ -327,7 +333,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(logTag, "加载横屏动画失败: " + e.getMessage());
         }
-        
+
         // 后台服务(语音、蓝牙)继续运行，不做任何改变
         Log.d(logTag, "后台服务继续运行");
     }
@@ -335,40 +341,43 @@ public class MainActivity extends AppCompatActivity {
     // 切换到竖屏模式
     private void switchToPortraitMode() {
         if (!isLandscapeMode) return;
-        
+
         Log.d(logTag, "切换回竖屏正常模式");
         isLandscapeMode = false;
-        
+
         // 步骤1: 清除所有系统UI标志
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
-        
+
         // 步骤2: 清除所有Window标志
         getWindow().clearFlags(
-                WindowManager.LayoutParams.FLAG_FULLSCREEN 
+                WindowManager.LayoutParams.FLAG_FULLSCREEN
                 | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         );
-        
+
         // 步骤3: 强制设置为非全屏模式
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
-        
+
         // 步骤4: 先恢复ActionBar
         if (getSupportActionBar() != null) {
             getSupportActionBar().show();
         }
-        
+
         // 步骤5: 恢复正常布局
         setContentView(R.layout.activity_main);
-        
+
+        // 添加淡入动画效果
+        overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
+
         // 步骤6: 等待布局完成后再刷新
         getWindow().getDecorView().post(() -> {
             getWindow().getDecorView().requestLayout();
         });
-        
+
         // 重新获取组件引用
         fragmentContainer = findViewById(R.id.fragment_container);
         bottomNavigationView = findViewById(R.id.bottom_navigation);
-        
+
         // 显示ActionBar
         if (getSupportActionBar() != null) {
             getSupportActionBar().show();
@@ -377,13 +386,15 @@ public class MainActivity extends AppCompatActivity {
         // 恢复Fragment和导航栏
         if (bottomNavigationView != null) {
             bottomNavigationView.setVisibility(View.VISIBLE);
-            
+
             // 重新设置导航栏监听器
             bottomNavigationView.setOnItemSelectedListener(item -> {
                 Fragment fragment = null;
+                boolean toRight = false; // 切换方向标志
                 try {
                     if (item.getItemId() == R.id.navigation_bluetooth) {
                         fragment = new BluetoothRemoteFragment();
+                        toRight = true; // 语音→蓝牙,向右滑动
                         isBluetoothFragmentActive = true;
                         pauseVoiceFunctions();
                         if (bluetoothConnectionListener != null) {
@@ -392,6 +403,7 @@ public class MainActivity extends AppCompatActivity {
                         Log.d(logTag, "切换到蓝牙Fragment");
                     } else if (item.getItemId() == R.id.navigation_voice_assistant) {
                         fragment = new PlaceholderFragment();
+                        toRight = false; // 蓝牙→语音,向左滑动
                         isBluetoothFragmentActive = false;
                         resumeVoiceFunctions();
                         if (bluetoothConnectionListener != null) {
@@ -400,7 +412,7 @@ public class MainActivity extends AppCompatActivity {
                         Log.d(logTag, "切换到语音Fragment");
                     }
                     if (fragment != null) {
-                        replaceFragment(fragment);
+                        replaceFragment(fragment, toRight); // 传入方向参数
                         return true;
                     }
                 } catch (Exception e) {
@@ -408,13 +420,13 @@ public class MainActivity extends AppCompatActivity {
                 }
                 return false;
             });
-            
-            // 恢复当前显示的Fragment
+
+            // 恢复当前显示的Fragment (横竖屏切换时不需要动画)
             try {
                 if (isBluetoothFragmentActive) {
-                    replaceFragment(new BluetoothRemoteFragment());
+                    replaceFragment(new BluetoothRemoteFragment(), true);
                 } else {
-                    replaceFragment(new PlaceholderFragment());
+                    replaceFragment(new PlaceholderFragment(), false);
                 }
             } catch (Exception e) {
                 Log.e(logTag, "恢复Fragment失败: " + e.getMessage());
@@ -499,19 +511,54 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void replaceFragment(Fragment fragment) {
+    /**
+     * 替换Fragment,支持方向感知的滑动动画
+     * @param fragment 要显示的Fragment
+     * @param toRight true=向右滑动(语音→蓝牙), false=向左滑动(蓝牙→语音)
+     */
+    private void replaceFragment(Fragment fragment, boolean toRight) {
         try {
             FragmentManager fragmentManager = getSupportFragmentManager();
             FragmentTransaction transaction = fragmentManager.beginTransaction();
+
+            // 根据方向设置对应的滑动动画
+            if (toRight) {
+                // 语音→蓝牙: 新页面从右侧滑入,旧页面向左滑出
+                transaction.setCustomAnimations(
+                    R.anim.slide_in_right,   // 进入动画
+                    R.anim.slide_out_left    // 退出动画
+                );
+            } else {
+                // 蓝牙→语音: 新页面从左侧滑入,旧页面向右滑出
+                transaction.setCustomAnimations(
+                    R.anim.slide_in_left,    // 进入动画
+                    R.anim.slide_out_right   // 退出动画
+                );
+            }
+
             transaction.replace(R.id.fragment_container, fragment);
             transaction.commitNow(); // 使用commitNow避免异步问题
-            Log.d(logTag, "Fragment替换成功");
+            Log.d(logTag, "Fragment替换成功,方向: " + (toRight ? "向右" : "向左"));
         } catch (Exception e) {
             Log.e(logTag, "替换Fragment时出错: " + e.getMessage());
             // 尝试使用commit
             try {
                 FragmentManager fragmentManager = getSupportFragmentManager();
                 FragmentTransaction transaction = fragmentManager.beginTransaction();
+
+                // 重新设置动画
+                if (toRight) {
+                    transaction.setCustomAnimations(
+                        R.anim.slide_in_right,
+                        R.anim.slide_out_left
+                    );
+                } else {
+                    transaction.setCustomAnimations(
+                        R.anim.slide_in_left,
+                        R.anim.slide_out_right
+                    );
+                }
+
                 transaction.replace(R.id.fragment_container, fragment);
                 transaction.commit();
             } catch (Exception e2) {
@@ -1061,12 +1108,23 @@ public class MainActivity extends AppCompatActivity {
                         });
                     } else {
                         // 不是控制命令，调用DeepSeek
-                        String res = ChatAPI.generateText(s);
-                        speak(res, () -> {
-                            if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
-                                Regnize(speechConfig);
-                            }
-                        });
+                        try {
+                            String res = ChatAPI.generateText(s);
+                            speak(res, () -> {
+                                if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                                    Regnize(speechConfig);
+                                }
+                            });
+                        } catch (Exception e) {
+                            // 网络错误处理
+                            Log.e(logTag, "AI API调用失败: " + e.getMessage(), e);
+                            String errorMessage = "抱歉，网络连接失败，请稍后再试";
+                            speak(errorMessage, () -> {
+                                if (!isBluetoothFragmentActive && !isVoiceFunctionsPaused) {
+                                    Regnize(speechConfig);
+                                }
+                            });
+                        }
                     }
                 }
             });

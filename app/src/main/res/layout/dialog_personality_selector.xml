@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <!-- 标题 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/personality_selector_title"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="#333333"
+        android:gravity="center"
+        android:paddingBottom="16dp" />
+
+    <!-- 人格选项容器 -->
+    <RadioGroup
+        android:id="@+id/personalityRadioGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- 专业助手 -->
+        <RadioButton
+            android:id="@+id/radioProfessional"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:padding="16dp"
+            android:background="@drawable/bg_personality_item"
+            android:text="专业助手"
+            android:textSize="16sp"
+            android:textColor="#333333"
+            android:buttonTint="#BD5742" />
+
+        <!-- 活泼助手 -->
+        <RadioButton
+            android:id="@+id/radioLively"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:padding="16dp"
+            android:background="@drawable/bg_personality_item"
+            android:text="活泼助手"
+            android:textSize="16sp"
+            android:textColor="#333333"
+            android:buttonTint="#BD5742" />
+
+        <!-- 温柔助手 -->
+        <RadioButton
+            android:id="@+id/radioGentle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:padding="16dp"
+            android:background="@drawable/bg_personality_item"
+            android:text="温柔助手"
+            android:textSize="16sp"
+            android:textColor="#333333"
+            android:buttonTint="#BD5742" />
+
+        <!-- 简洁助手 -->
+        <RadioButton
+            android:id="@+id/radioConcise"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:padding="16dp"
+            android:background="@drawable/bg_personality_item"
+            android:text="简洁助手"
+            android:textSize="16sp"
+            android:textColor="#333333"
+            android:buttonTint="#BD5742" />
+
+        <!-- 自定义 -->
+        <RadioButton
+            android:id="@+id/radioCustom"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:padding="16dp"
+            android:background="@drawable/bg_personality_item"
+            android:text="自定义"
+            android:textSize="16sp"
+            android:textColor="#333333"
+            android:buttonTint="#BD5742" />
+    </RadioGroup>
+
+    <!-- 自定义提示词按钮 -->
+    <Button
+        android:id="@+id/btnEditCustomPrompt"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/personality_custom_button"
+        android:textColor="#FFFFFF"
+        android:background="@drawable/bg_rounded_button"
+        android:visibility="gone" />
+
+    <!-- 按钮容器 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="16dp"
+        android:gravity="end">
+
+        <!-- 取消按钮 -->
+        <Button
+            android:id="@+id/btnCancel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:text="@string/personality_cancel"
+            android:textColor="#666666"
+            android:background="@android:color/transparent"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="10dp" />
+
+        <!-- 确认按钮 -->
+        <Button
+            android:id="@+id/btnConfirm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/personality_confirm"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/bg_rounded_button"
+            android:paddingHorizontal="24dp"
+            android:paddingVertical="10dp" />
+    </LinearLayout>
+
+</LinearLayout>
