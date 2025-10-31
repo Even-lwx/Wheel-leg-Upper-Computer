@@ -1,6 +1,33 @@
 # API Keys 配置说明
 
-⚠️ **重要**: 本项目需要配置 API Keys 才能正常运行。请按照以下步骤配置。
+⚠️ **重要**: 本项目需要配置 API Keys 才能正常运行。
+
+## 🚀 快速配置（推荐方式）
+
+### 方式一：使用本地配置文件（推荐）
+
+1. **找到模板文件**:
+   ```
+   app/src/main/java/com/microsoft/cognitiveservices/speech/samples/sdkdemo/LocalApiKeys_Template.java
+   ```
+
+2. **复制并重命名**:
+   - 复制 `LocalApiKeys_Template.java`
+   - 重命名为 `LocalApiKeys.java`（去掉 `_Template` 后缀）
+
+3. **填入真实密钥**:
+   打开 `LocalApiKeys.java`，替换占位符：
+   ```java
+   public static final String AZURE_SPEECH_KEY = "你的Azure密钥";
+   public static final String AZURE_SPEECH_REGION = "eastus"; // 你的区域
+   public static final String DEEPSEEK_API_KEY = "你的DeepSeek密钥";
+   ```
+
+4. **完成** 🎉
+   - `LocalApiKeys.java` 已添加到 `.gitignore`，不会被提交到 Git
+   - 可以安全地保存真实密钥在本地
+
+---
 
 ## 📋 需要配置的 API Keys
 

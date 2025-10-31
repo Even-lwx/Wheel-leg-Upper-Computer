@@ -9,15 +9,14 @@ public class VoiceConfig {
     // ==================== Azure 语音服务配置 ====================
     /**
      * Azure Speech Service 订阅密钥
-     * 注意: 请在本地配置真实密钥，不要提交到 Git
-     * 获取方式: https://portal.azure.com -> Cognitive Services -> Speech Services
+     * 从 LocalApiKeys 读取（该文件不会提交到 Git）
      */
-    public static final String AZURE_SPEECH_KEY = "YOUR_AZURE_SPEECH_KEY_HERE";
+    public static final String AZURE_SPEECH_KEY = LocalApiKeys.AZURE_SPEECH_KEY;
 
     /**
      * Azure Speech Service 区域
      */
-    public static final String AZURE_SPEECH_REGION = "eastus";
+    public static final String AZURE_SPEECH_REGION = LocalApiKeys.AZURE_SPEECH_REGION;
 
     /**
      * Azure TTS 语音名称 (多语言神经语音)
@@ -37,10 +36,9 @@ public class VoiceConfig {
     // ==================== DeepSeek API 配置 ====================
     /**
      * DeepSeek API 密钥
-     * 注意: 请在本地配置真实密钥，不要提交到 Git
-     * 获取方式: https://platform.deepseek.com
+     * 从 LocalApiKeys 读取（该文件不会提交到 Git）
      */
-    public static final String DEEPSEEK_API_KEY = "YOUR_DEEPSEEK_API_KEY_HERE";
+    public static final String DEEPSEEK_API_KEY = LocalApiKeys.DEEPSEEK_API_KEY;
 
     /**
      * DeepSeek API 端点

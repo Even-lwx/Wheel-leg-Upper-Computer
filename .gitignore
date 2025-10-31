@@ -7,6 +7,12 @@ build/
 # Local configuration file (sdk path, etc)
 local.properties
 
+# ==================== API Keys 配置文件 ====================
+# 本地 API Keys 文件（包含真实密钥，不提交到 Git）
+**/LocalApiKeys.java
+# 保留模板文件
+!**/LocalApiKeys_Template.java
+
 # 忽略所有输出、临时、日志、缓存、IDE 配置、release/debug、生成文件等
 *.log
 *.tmp
