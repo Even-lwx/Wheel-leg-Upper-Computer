@@ -1262,7 +1262,7 @@ public class MainActivity extends AppCompatActivity {
                     stopped = false;
                 }
 
-                String ssmlContent = "<speak xmlns=\"http://www.w3.org/2001/10/synthesis\" xmlns:mstts=\"http://www.w3.org/2001/mstts\" xmlns:emo=\"http://www.w3.org/2009/10/emotionml\" version=\"1.0\"  xml:lang=\"zh-CN\"><voice name=\"zh-CN-XiaoxiaoMultilingualNeural\"><lang xml:lang=\"zh-CN\"><prosody rate=\"17%\">"+content.replace("*"," ")+"</prosody></lang></voice></speak> ";
+                String ssmlContent = "<speak xmlns=\"http://www.w3.org/2001/10/synthesis\" xmlns:mstts=\"http://www.w3.org/2001/mstts\" xmlns:emo=\"http://www.w3.org/2009/10/emotionml\" version=\"1.0\"  xml:lang=\"zh-CN\"><voice name=\"zh-CN-XiaoxiaoMultilingualNeural\"><lang xml:lang=\"zh-CN\"><prosody rate=\"17%\" volume=\"+50%\">"+content.replace("*"," ")+"</prosody></lang></voice></speak> ";
 
                 SpeechSynthesisResult result = synthesizer.StartSpeakingSsmlAsync(ssmlContent).get();
                 AudioDataStream audioDataStream = AudioDataStream.fromResult(result);
